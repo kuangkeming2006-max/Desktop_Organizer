@@ -71,6 +71,12 @@ Window {
                     radius: capsuleRadius
                     color: "#1D1D1F"
 
+                    // 拖拽區（放在最底層，不遮擋按鈕）
+                    MouseArea {
+                        anchors.fill: parent
+                        onPressed: tagWindow.startSystemMove()
+                    }
+
                     // 极淡边框增加立体感
                     Rectangle {
                         anchors.fill: parent
@@ -102,31 +108,81 @@ Window {
                             Layout.alignment: Qt.AlignVCenter
                         }
 
-                        Button {
+                        Item {
                             id: menuBtn
                             Layout.preferredWidth: 34; Layout.preferredHeight: 34
                             Layout.alignment: Qt.AlignVCenter
-                            background: Rectangle {
-                                radius: 17
-                                color: menuBtn.hovered ? Qt.rgba(1,1,1,0.18) : "transparent"
+
+                            Rectangle {
+                                id: menuBtnBg
+                                anchors.fill: parent; radius: 17
+                                color: menuBtnArea.containsMouse ? Qt.rgba(1,1,1,0.18) : "transparent"
                                 Behavior on color { ColorAnimation { duration: 150 } }
                             }
-                            contentItem: Text {
+
+                            Text {
+                                anchors.centerIn: parent
                                 text: "\u22EF"
                                 font.pixelSize: 20
                                 color: "#F5F5F7"
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
                             }
-                            onClicked: tagMenu.open()
-                            Menu {
+
+                            MouseArea {
+                                id: menuBtnArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                propagateComposedEvents: false
+                                onClicked: tagMenu.open()
+                            }
+
+                            Popup {
                                 id: tagMenu
-                                MenuItem { text: "打开所在文件夹"; onTriggered: Qt.openUrlExternally("file:///" + tagWindow.savePath) }
-                                MenuItem {
-                                    text: "关闭并复原文件"
-                                    onTriggered: {
-                                        appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath);
-                                        tagWindow.destroy();
+                                y: 40
+                                x: parent.width - 150
+                                width: 150
+                                padding: 4
+                                background: Rectangle {
+                                    radius: 10
+                                    color: "#1D1D1F"
+                                    border.color: Qt.rgba(1,1,1,0.12)
+                                    border.width: 1
+                                    layer.enabled: true
+                                    layer.effect: MultiEffect {
+                                        shadowEnabled: true
+                                        shadowColor: Qt.rgba(0,0,0,0.25)
+                                        shadowBlur: 0.5
+                                        shadowVerticalOffset: 8
+                                    }
+                                }
+                                contentItem: Column {
+                                    spacing: 2
+                                    Repeater {
+                                        model: [
+                                            { text: "打开所在文件夹", action: function() { Qt.openUrlExternally("file:///" + tagWindow.savePath); tagMenu.close(); } },
+                                            { text: "关闭并复原文件", action: function() { appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath); tagWindow.destroy(); } }
+                                        ]
+                                        delegate: Rectangle {
+                                            width: parent.width
+                                            height: 36
+                                            radius: 8
+                                            color: itemMouse.containsMouse ? Qt.rgba(1,1,1,0.10) : "transparent"
+                                            Behavior on color { ColorAnimation { duration: 120 } }
+
+                                            Text {
+                                                anchors.left: parent.left; anchors.leftMargin: 14
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: modelData.text
+                                                color: "#F5F5F7"
+                                                font.pixelSize: 14
+                                            }
+
+                                            MouseArea {
+                                                id: itemMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                onClicked: modelData.action()
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -198,20 +254,6 @@ Window {
                     }
                 }
             }
-        }
-
-        // --- 拖动区域（仅顶部胶囊区域可拖动）---
-        MouseArea {
-            id: dragArea
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.topMargin: cardPadding
-            anchors.leftMargin: cardPadding
-            anchors.rightMargin: cardPadding
-            height: capsuleHeight
-            z: 10
-            onPressed: tagWindow.startSystemMove()
         }
 
         // --- 右下角拉伸手柄 ---
