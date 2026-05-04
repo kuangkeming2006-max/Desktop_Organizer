@@ -18,7 +18,7 @@ Window {
     width: tagWidth
     height: tagHeight
     visible: true
-    flags: Qt.Window | Qt.WindowStaysOnBottomHint
+    flags: Qt.Tool | Qt.WindowStaysOnBottomHint
     color: "transparent"
 
     // 觸發 DWM 重新計算非客戶區

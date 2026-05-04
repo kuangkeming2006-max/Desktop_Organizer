@@ -12,6 +12,19 @@ ApplicationWindow {
 
     color: "transparent"
 
+    // 攔截關閉事件 → 最小化到系統托盤
+    onClosing: function(close) {
+        close.accepted = false;
+        appBackend.minimizeToTray(root);
+    }
+
+    // 最小化還原後刷新 DWM 避免視窗變透明
+    onVisibleChanged: {
+        if (visible && appBackend.initNativeWindow) {
+            appBackend.initNativeWindow(root);
+        }
+    }
+
     property int activeIndex: 0
     property string globalRootPath: "D:/Stickers"
     property var activeTagWindows: ({})
@@ -85,6 +98,11 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        // 初始化系統托盤
+        if (appBackend.initSystemTray) {
+            appBackend.initSystemTray(root);
+        }
+
         // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         if (appBackend.initNativeWindow) {
             appBackend.initNativeWindow(root);
@@ -188,7 +206,7 @@ ApplicationWindow {
                             opacity: closeMouse.containsMouse ? 0.85 : 1.0
                             Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
                             Behavior on opacity { NumberAnimation { duration: 150 } }
-                            MouseArea { id: closeMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.close() }
+                            MouseArea { id: closeMouse; anchors.fill: parent; hoverEnabled: true; onClicked: appBackend.minimizeToTray(root) }
                         }
                         Rectangle {
                             width: 14; height: 14; radius: 7; color: "#ffbd2e"

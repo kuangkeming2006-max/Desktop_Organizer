@@ -1,4 +1,4 @@
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QIcon>
@@ -17,6 +17,11 @@
 #include <QWindow>
 #include <QQuickWindow>
 #include <QAbstractNativeEventFilter>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
+#include <QPointer>
+#include <QPixmap>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dwmapi.h>
@@ -28,12 +33,17 @@
 // - 保留 WS_CAPTION | WS_THICKFRAME 樣式以觸發 DWM 原生動畫
 class WinEventFilter : public QAbstractNativeEventFilter {
 public:
+    static WinEventFilter* instance() { return s_instance; }
+
+    WinEventFilter() { s_instance = this; }
+
+    void setHwnd(HWND h) { m_hwnd = h; }
+
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override {
         if (eventType == "windows_generic_MSG") {
             MSG *msg = static_cast<MSG *>(message);
             switch (msg->message) {
             case WM_NCCALCSIZE: {
-                // 將非客戶區設為 0：客戶區 = 完整視窗範圍
                 if (msg->wParam == TRUE) {
                     NCCALCSIZE_PARAMS *ncp = reinterpret_cast<NCCALCSIZE_PARAMS *>(msg->lParam);
                     ncp->rgrc[0] = ncp->rgrc[1];
@@ -42,24 +52,38 @@ public:
                 return true;
             }
             case WM_NCACTIVATE: {
-                // 避免 DWM 在最小化還原時因非客戶區為 0 而出錯
-                // 告知 Windows 我們已自行處理非客戶區繪製（什麼都不畫）
                 if (result) *result = TRUE;
                 return true;
+            }
+            case WM_SHOWWINDOW: {
+                if (msg->wParam == TRUE && m_hwnd) {
+                    SetWindowPos(m_hwnd, nullptr, 0, 0, 0, 0,
+                                 SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+                }
+                return false;
             }
             }
         }
         return false;
     }
+private:
+    HWND m_hwnd = nullptr;
+    static WinEventFilter* s_instance;
 };
+WinEventFilter* WinEventFilter::s_instance = nullptr;
 #endif
 
 
 
 class AppBackend : public QObject {
     Q_OBJECT
+    Q_PROPERTY(bool trayAvailable READ isTrayAvailable CONSTANT)
 private:
     QJsonObject m_config;
+    QSystemTrayIcon *m_trayIcon = nullptr;
+    QPointer<QQuickWindow> m_mainWindow;
+
+    bool isTrayAvailable() const { return m_trayIcon != nullptr; }
 
     // 获取配置文件的绝对路径 (C:\Users\用户名\AppData\Roaming\SYSU_DesktopOrganizer\config.json)
     QString getConfigPath() {
@@ -98,6 +122,12 @@ public:
     Q_INVOKABLE void initNativeWindow(QQuickWindow* window) {
         if (!window) return;
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
+
+#ifdef Q_OS_WIN
+        // 將 HWND 註冊到原生事件過濾器（用於 WM_SHOWWINDOW 刷新）
+        if (WinEventFilter::instance())
+            WinEventFilter::instance()->setHwnd(hwnd);
+#endif
 
         // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
@@ -216,6 +246,88 @@ public:
         m_config["tags"] = tags;
         saveConfig();
     }
+
+    // ==================== 系統托盤 ====================
+
+    // 初始化系統托盤（由 QML 在 Component.onCompleted 中呼叫）
+    Q_INVOKABLE void initSystemTray(QQuickWindow *window) {
+        m_mainWindow = window;
+
+        if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+            qDebug() << "System tray not available on this system.";
+            return;
+        }
+
+        m_trayIcon = new QSystemTrayIcon(this);
+
+        // 使用應用程式圖示，若無則建立一個簡單的色塊圖示
+        QIcon appIcon = QIcon(":/assets/app_icon.ico");
+        if (appIcon.isNull()) {
+            QPixmap pm(32, 32);
+            pm.fill(Qt::darkGray);
+            appIcon = QIcon(pm);
+        }
+        m_trayIcon->setIcon(appIcon);
+        m_trayIcon->setToolTip("Desktop Organizer");
+
+        // 右鍵選單
+        QMenu *menu = new QMenu();
+        QAction *showAction = menu->addAction("顯示主視窗");
+        QAction *quitAction = menu->addAction("退出程式");
+
+        // addAction() 和 setContextMenu() 已處理所有權
+        m_trayIcon->setContextMenu(menu);
+
+        // 左鍵點擊還原
+        QObject::connect(m_trayIcon, &QSystemTrayIcon::activated, this, [window](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
+                if (window) {
+                    window->setVisible(true);
+                    window->raise();
+                    window->requestActivate();
+                }
+            }
+        });
+
+        QObject::connect(showAction, &QAction::triggered, this, [window]() {
+            if (window) {
+                window->setVisible(true);
+                window->raise();
+                window->requestActivate();
+            }
+        });
+
+        QObject::connect(quitAction, &QAction::triggered, this, [this]() {
+            // 完全退出，先隱藏托盤再 quit
+            if (m_trayIcon) m_trayIcon->hide();
+            QApplication::quit();
+        });
+
+        m_trayIcon->show();
+        qDebug() << "System tray initialized.";
+    }
+
+    // 最小化到系統托盤（關閉按鈕觸發）
+    Q_INVOKABLE void minimizeToTray(QQuickWindow *window) {
+        if (!window || !m_trayIcon) return;
+
+        window->hide();
+        m_trayIcon->show();
+
+        // Windows 氣泡提示：「Desktop Organizer 已最小化到系統托盤」
+        m_trayIcon->showMessage(
+            "Desktop Organizer",
+            "已最小化到系統托盤，雙擊圖示還原。",
+            QSystemTrayIcon::Information,
+            3000
+        );
+    }
+
+    // 從 QML 直接發送托盤提示
+    Q_INVOKABLE void showTrayMessage(const QString &title, const QString &msg) {
+        if (m_trayIcon)
+            m_trayIcon->showMessage(title, msg, QSystemTrayIcon::Information, 3000);
+    }
 };
 
 // ======================================================================
@@ -227,13 +339,13 @@ int main(int argc, char *argv[])
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 #endif
 
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
 
     // 设置应用元数据 (在注册表和任务管理器中显示)
     app.setOrganizationName("SYSU CyberSec");
     app.setOrganizationDomain("sysu.edu.cn");
     app.setApplicationName("Desktop Organizer");
-    app.setWindowIcon(QIcon(":/assets/app_icon.ico")); // 记得在 qrc 里放个图标
+    app.setWindowIcon(QIcon(":/assets/app_icon.ico"));
 
     QQmlApplicationEngine engine;
 
