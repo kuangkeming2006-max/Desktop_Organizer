@@ -1,0 +1,39 @@
+# === Build Output ===
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CMakeCache.txt.prev
+cmake_install.cmake
+Makefile
+*.ninja
+*.log
+compile_commands.json
+
+# === Qt / MOC generated ===
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.moc
+*.moc.d
+*.moc.json
+_autogen/
+qtcsettings.cmake
+.qmake.stash
+*.pro.user*
+*.qmlproject.user*
+
+# === IDE / Editor ===
+.vs/
+.vscode/
+.idea/
+.qtcreator/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === OS files ===
+Desktop.ini

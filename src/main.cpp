@@ -1,0 +1,242 @@
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QIcon>
+#include <QSettings>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QUrl>
+#include <QDebug>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QStandardPaths>
+#include <QVariantMap>
+#include <QVariantList>
+#include <QWindow>
+#include <QQuickWindow>
+#include <QAbstractNativeEventFilter>
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "user32.lib")
+
+// 原生視窗事件過濾器：攔截 WM_NCCALCSIZE 消除非客戶區（透明框），
+// 同時保留 WS_CAPTION 等樣式以觸發 DWM 原生動畫
+class WinEventFilter : public QAbstractNativeEventFilter {
+public:
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *) override {
+        if (eventType == "windows_generic_MSG") {
+            MSG *msg = static_cast<MSG *>(message);
+            if (msg->message == WM_NCCALCSIZE) {
+                // 告訴 Windows 不需要保留非客戶區，整個視窗都是客戶區
+                // 透明框因此消失，但 DWM 仍因 WS_CAPTION 樣式而提供動畫
+                return true;
+            }
+        }
+        return false;
+    }
+};
+#endif
+
+
+
+class AppBackend : public QObject {
+    Q_OBJECT
+private:
+    QJsonObject m_config;
+
+    // 获取配置文件的绝对路径 (C:\Users\用户名\AppData\Roaming\SYSU_DesktopOrganizer\config.json)
+    QString getConfigPath() {
+        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir(dataDir);
+        if (!dir.exists()) dir.mkpath(".");
+        return dir.absoluteFilePath("config.json");
+    }
+
+    // 将内存中的 JSON 写入硬盘
+    void saveConfig() {
+        QFile file(getConfigPath());
+        if (file.open(QIODevice::WriteOnly)) {
+            QJsonDocument doc(m_config);
+            file.write(doc.toJson());
+            file.close();
+        }
+    }
+
+    // 从硬盘加载 JSON
+    void loadConfig() {
+        QFile file(getConfigPath());
+        if (file.exists() && file.open(QIODevice::ReadOnly)) {
+            QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+            m_config = doc.object();
+        } else {
+            // 初始化默认结构
+            m_config["settings"] = QJsonObject();
+            m_config["tags"] = QJsonArray();
+            m_config["fileLedger"] = QJsonObject();
+        }
+    }
+
+public:
+    // 設置原生視窗樣式：加上 WS_CAPTION 等樣式讓 DWM 提供動畫，
+    // 透明框由 WinEventFilter（攔截 WM_NCCALCSIZE）消除
+    Q_INVOKABLE void setNativeWindowStyle(QQuickWindow* window) {
+        if (!window) return;
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+
+        // 注入 WS_CAPTION 等樣式以激發 DWM 原生動畫（最大/最小化、關閉）
+        LONG style = GetWindowLong(hwnd, GWL_STYLE);
+        SetWindowLong(hwnd, GWL_STYLE, style | WS_CAPTION | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_SYSMENU);
+
+        // 通知 DWM 樣式已變更
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+    }
+
+    Q_INVOKABLE QString getRootPath() {
+        QJsonObject settings = m_config["settings"].toObject();
+        return settings.contains("rootPath") ? settings["rootPath"].toString() : "D:/Stickers";
+    }
+
+    // 设置并保存全局根目录
+    Q_INVOKABLE void setRootPath(const QString &path) {
+        QJsonObject settings = m_config["settings"].toObject();
+        settings["rootPath"] = path;
+        m_config["settings"] = settings;
+        saveConfig(); // 落盘
+        qDebug() << "Global root path updated to:" << path;
+    }
+    explicit AppBackend(QObject *parent = nullptr) : QObject(parent) {
+        loadConfig(); // 启动时加载配置
+    }
+
+    // ==================== 暴露给 QML 的接口 ====================
+
+    // 1. 开机自启 (保持不变)
+    Q_INVOKABLE void setAutoStart(bool enable) { /* ... 之前的代码 ... */ }
+
+    // 2. 获取所有已保存的贴纸 (用于开机恢复)
+    Q_INVOKABLE QVariantList getSavedTags() {
+        return m_config["tags"].toArray().toVariantList();
+    }
+
+    // 3. 保存新生成的贴纸信息
+    Q_INVOKABLE void saveNewTag(const QVariantMap& tagInfo) {
+        QJsonArray tags = m_config["tags"].toArray();
+        tags.append(QJsonObject::fromVariantMap(tagInfo));
+        m_config["tags"] = tags;
+        saveConfig();
+    }
+
+    // 4. 将文件移入贴纸，并在 Ledger 中记账！
+    Q_INVOKABLE bool moveFileToTag(const QString &fileUrl, const QString &destFolder) {
+        QUrl url(fileUrl);
+        if (!url.isLocalFile()) return false;
+
+        QString sourcePath = url.toLocalFile();
+        QFileInfo fileInfo(sourcePath);
+
+        QDir dir(destFolder);
+        if (!dir.exists()) dir.mkpath(".");
+
+        QString destPath = dir.absoluteFilePath(fileInfo.fileName());
+
+        if (QFile::rename(sourcePath, destPath)) {
+            // 【核心记账逻辑】：记录 目标物理路径 -> 原始桌面路径
+            QJsonObject ledger = m_config["fileLedger"].toObject();
+            ledger[destPath] = sourcePath;
+            m_config["fileLedger"] = ledger;
+            saveConfig();
+
+            qDebug() << "File moved & logged:" << destPath;
+            return true;
+        }
+        return false;
+    }
+
+    // 5. 销毁贴纸并根据 Ledger 逆向复原文件
+    Q_INVOKABLE void removeTagAndRestore(const QString &tagId, const QString &tagFolder) {
+        QJsonObject ledger = m_config["fileLedger"].toObject();
+        QStringList keysToRemove;
+
+        // 遍历账本，把属于这个贴纸目录下的文件全部移回去
+        for (auto it = ledger.begin(); it != ledger.end(); ++it) {
+            QString currentPath = it.key();
+            QString originalPath = it.value().toString();
+
+            if (currentPath.startsWith(tagFolder)) {
+                if (QFile::rename(currentPath, originalPath)) {
+                    qDebug() << "Restored:" << originalPath;
+                    keysToRemove.append(currentPath);
+                }
+            }
+        }
+
+        // 从账本中抹去记录
+        for (const QString& k : keysToRemove) {
+            ledger.remove(k);
+        }
+        m_config["fileLedger"] = ledger;
+
+        // 从贴纸数组中删除记录
+        QJsonArray tags = m_config["tags"].toArray();
+        for (int i = 0; i < tags.size(); ++i) {
+            if (tags[i].toObject()["id"].toString() == tagId) {
+                tags.removeAt(i);
+                break;
+            }
+        }
+        m_config["tags"] = tags;
+
+        saveConfig(); // 最终落盘
+        qDebug() << "Tag" << tagId << "removed and files restored.";
+    }
+};
+
+// ======================================================================
+// 主函数
+// ======================================================================
+int main(int argc, char *argv[])
+{
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+#endif
+
+    QGuiApplication app(argc, argv);
+
+    // 设置应用元数据 (在注册表和任务管理器中显示)
+    app.setOrganizationName("SYSU CyberSec");
+    app.setOrganizationDomain("sysu.edu.cn");
+    app.setApplicationName("Desktop Organizer");
+    app.setWindowIcon(QIcon(":/assets/app_icon.ico")); // 记得在 qrc 里放个图标
+
+    QQmlApplicationEngine engine;
+
+#ifdef Q_OS_WIN
+    // 安裝原生訊息過濾器：攔截 WM_NCCALCSIZE 消除透明框
+    WinEventFilter filter;
+    app.installNativeEventFilter(&filter);
+#endif
+
+    // 实例化后端类，并将其注册到 QML 的全局上下文中
+    AppBackend backend;
+    engine.rootContext()->setContextProperty("appBackend", &backend);
+
+    // 加载 QML 主界面
+    const QUrl url(QStringLiteral("qrc:/qt/qml/Desktop_Tool/qml/Main.qml"));
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated,
+                     &app, [url](QObject *obj, const QUrl &objUrl) {
+                         if (!obj && url == objUrl)
+                             QCoreApplication::exit(-1);
+                     }, Qt::QueuedConnection);
+
+    engine.load(url);
+
+    return app.exec();
+}
+
+// 因为把 Q_OBJECT 写在 cpp 文件里，为了让 MOC (元对象编译器) 正确识别，
+// 我们需要在末尾包含生成的 moc 文件（前提是 CMakeLists 中开启了 CMAKE_AUTOMOC）
+#include "main.moc"
