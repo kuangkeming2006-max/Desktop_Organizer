@@ -47,9 +47,6 @@ public:
                 if (result) *result = TRUE;
                 return true;
             }
-            case WM_NCHITTEST: {IENT;
-                return true;
-            }
             }
         }
         return false;
