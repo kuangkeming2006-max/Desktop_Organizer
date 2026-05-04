@@ -13,6 +13,8 @@ Window {
     property string savePath: "D:/"
     property string allowedExts: ""
 
+    signal tagClosed(string tagId)
+
     width: tagWidth
     height: tagHeight
     visible: true
@@ -161,7 +163,7 @@ Window {
                                         model: [
                                             { text: "修改贴纸名称", action: function() { tagMenu.close(); renameDialog.open(); } },
                                             { text: "打开所在文件夹", action: function() { Qt.openUrlExternally("file:///" + tagWindow.savePath); tagMenu.close(); } },
-                                            { text: "关闭并复原文件", action: function() { appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath); tagWindow.destroy(); } }
+                                            { text: "关闭并复原文件", action: function() { tagWindow.tagClosed(tagWindow.tagId); appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath); tagWindow.destroy(); } }
                                         ]
                                         delegate: Rectangle {
                                             width: parent.width
@@ -258,10 +260,10 @@ Window {
             }
         }
 
-        // --- 右下角拉伸手柄 ---
+        // --- 右下角拉伸手柄 (圆弧提示 + 缩放光标) ---
         Item {
             id: resizeHandle
-            width: 20; height: 20
+            width: 28; height: 28
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.rightMargin: 4
@@ -273,16 +275,23 @@ Window {
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.reset();
-                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.12);
-                    ctx.lineWidth = 1.5;
-                    ctx.moveTo(20, 8); ctx.lineTo(8, 20);
-                    ctx.moveTo(20, 14); ctx.lineTo(14, 20);
-                    ctx.stroke();
+                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.15);
+                    ctx.lineWidth = 2;
+                    ctx.lineCap = "round";
+                    // 画三条圆弧线，从外到内
+                    var cx = 24, cy = 24, gap = 5;
+                    for (var i = 0; i < 3; i++) {
+                        var r = 6 + i * gap;
+                        ctx.beginPath();
+                        ctx.arc(cx, cy, r, 0.75 * Math.PI, Math.PI);
+                        ctx.stroke();
+                    }
                 }
             }
 
             MouseArea {
                 anchors.fill: parent
+                cursorShape: Qt.SizeFDiagCursor
                 property point lastPos
                 onPressed: (mouse) => lastPos = Qt.point(mouse.x, mouse.y)
                 onPositionChanged: (mouse) => {
@@ -339,6 +348,7 @@ Window {
                 font.pixelSize: 14
                 padding: 8
                 background: Rectangle {
+                    id: renameInputBg
                     radius: 8
                     color: "white"
                     border.color: Qt.rgba(0,0,0,0.12)
@@ -354,7 +364,10 @@ Window {
                     text: "取消"
                     flat: true
                     focusPolicy: Qt.NoFocus
-                    onClicked: renameDialog.close()
+                    onClicked: {
+                        renameInputBg.border.color = Qt.rgba(0,0,0,0.12);
+                        renameDialog.close();
+                    }
                 }
                 Button {
                     id: renameConfirm
@@ -373,10 +386,13 @@ Window {
                     }
                     onClicked: {
                         var newName = renameInput.text.trim();
-                        if (newName.length > 0) {
-                            tagWindow.tagTitle = newName;
-                            appBackend.renameTag(tagWindow.tagId, newName);
+                        if (newName.length === 0) {
+                            renameInputBg.border.color = "#FF3B30";
+                            return;
                         }
+                        tagWindow.tagTitle = newName;
+                        appBackend.renameTag(tagWindow.tagId, newName);
+                        renameInputBg.border.color = Qt.rgba(0,0,0,0.12);
                         renameDialog.close();
                     }
                 }
