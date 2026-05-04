@@ -18,10 +18,29 @@ ApplicationWindow {
         appBackend.minimizeToTray(root);
     }
 
-    // 最小化還原後刷新 DWM 避免視窗變透明
+    // 監聽 Visibility 變化（專門處理任務欄的最小化與還原）
+    onVisibilityChanged: {
+        if (visibility !== Window.Minimized && visibility !== Window.Hidden) {
+            if (appBackend.initNativeWindow) {
+                forceDwmRefresh.start();
+            }
+        }
+    }
+
+    // 保持對 visible 的監聽（處理從系統托盤徹底隱藏後還原的情況）
     onVisibleChanged: {
         if (visible && appBackend.initNativeWindow) {
-            appBackend.initNativeWindow(root);
+            forceDwmRefresh.start();
+        }
+    }
+
+    Timer {
+        id: forceDwmRefresh
+        interval: 50
+        onTriggered: {
+            if (appBackend.initNativeWindow) {
+                appBackend.initNativeWindow(root);
+            }
         }
     }
 

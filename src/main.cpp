@@ -57,6 +57,7 @@ public:
             }
             case WM_SHOWWINDOW: {
                 if (msg->wParam == TRUE && m_hwnd) {
+                    // 備份：觸發 DWM 框架重算，讓 WM_NCCALCSIZE 重新消除非客戶區
                     SetWindowPos(m_hwnd, nullptr, 0, 0, 0, 0,
                                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
                 }
@@ -127,10 +128,17 @@ public:
         // 將 HWND 註冊到原生事件過濾器（用於 WM_SHOWWINDOW 刷新）
         if (WinEventFilter::instance())
             WinEventFilter::instance()->setHwnd(hwnd);
+
+        // 啟用持久場景圖與圖形資源：最小化/隱藏後不會釋放渲染緩衝，避免還原後變透明
+        window->setPersistentSceneGraph(true);
+        window->setPersistentGraphics(true);
 #endif
 
         // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+
+        // 關鍵修復：強制 Qt 提交新一幀渲染，填補透明區域
+        window->update();
     }
 
     Q_INVOKABLE QString getRootPath() {
@@ -282,6 +290,9 @@ public:
         QObject::connect(m_trayIcon, &QSystemTrayIcon::activated, this, [window](QSystemTrayIcon::ActivationReason reason) {
             if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
                 if (window) {
+                    if (window->visibility() == QWindow::Minimized) {
+                        window->showNormal();
+                    }
                     window->setVisible(true);
                     window->raise();
                     window->requestActivate();
@@ -291,6 +302,9 @@ public:
 
         QObject::connect(showAction, &QAction::triggered, this, [window]() {
             if (window) {
+                if (window->visibility() == QWindow::Minimized) {
+                    window->showNormal();
+                }
                 window->setVisible(true);
                 window->raise();
                 window->requestActivate();
