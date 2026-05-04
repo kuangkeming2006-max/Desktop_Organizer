@@ -39,8 +39,8 @@ ApplicationWindow {
         } else {
             normalX = root.x; normalY = root.y;
             normalW = root.width; normalH = root.height;
-            maxAnimX.to = 0; maxAnimY.to = 0;
-            maxAnimW.to = Screen.width; maxAnimH.to = Screen.height;
+            maxAnimX.to = Screen.desktopAvailableLeft; maxAnimY.to = Screen.desktopAvailableTop;
+            maxAnimW.to = Screen.desktopAvailableWidth; maxAnimH.to = Screen.desktopAvailableHeight;
             maxAnim.start();
             isMaximized = true;
         }
