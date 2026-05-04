@@ -8,7 +8,7 @@ ApplicationWindow {
     width: 1050
     height: 700
     visible: true
-    flags: Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint
+    flags: Qt.Window | Qt.FramelessWindowHint
 
     color: "transparent"
 
