@@ -53,15 +53,15 @@ ApplicationWindow {
     // --- 黑白纯色 + 云母层级 色板 ---
     // 第1层：基础介质层 (Window Background)
     readonly property color mdSurfaceBg: isDarkMode ? Qt.rgba(0.05, 0.05, 0.05, 0.98) : Qt.rgba(0.98, 0.98, 0.98, 0.98)
-    
+
     // 第2层：卡片层 (Content card / Sidebar)
     readonly property color mdCardBg: isDarkMode ? Qt.rgba(0.12, 0.12, 0.12, 0.85) : Qt.rgba(1.0, 1.0, 1.0, 0.85)
     readonly property color mdCardBorder: isDarkMode ? Qt.rgba(1.0, 1.0, 1.0, 0.1) : Qt.rgba(0.0, 0.0, 0.0, 0.08)
-    
+
     // 第3层：输入框/交互元素层 (Input/Hover areas)
     readonly property color mdInputBg: isDarkMode ? Qt.rgba(0.18, 0.18, 0.18, 0.6) : Qt.rgba(0.92, 0.92, 0.92, 0.6)
     readonly property color mdHover: isDarkMode ? Qt.rgba(1.0, 1.0, 1.0, 0.08) : Qt.rgba(0.0, 0.0, 0.0, 0.05)
-    
+
     // 文本颜色
     readonly property color mdTextPrimary: isDarkMode ? "#ffffff" : "#000000"
     readonly property color mdTextSecondary: isDarkMode ? "#888888" : "#666666"
@@ -111,6 +111,14 @@ ApplicationWindow {
                 var tag = comp.createObject(null, qmlProps);
                 if (tag) {
                     root.activeTagWindows[qmlProps.tagId] = tag;
+                    tag.tagClosed.connect(function(tid) {
+                        for (var i = 0; i < activeTagsModel.count; i++) {
+                            if (activeTagsModel.get(i).tagId === tid) {
+                                activeTagsModel.remove(i);
+                                break;
+                            }
+                        }
+                    });
                 }
             }
         }
@@ -348,7 +356,12 @@ ApplicationWindow {
                                         id: inputName
                                         Layout.fillWidth: true; font.pixelSize: 14; color: mdTextPrimary; placeholderText: "例如：PDF 收纳区"
                                         verticalAlignment: TextInput.AlignVCenter; leftPadding: 16; rightPadding: 16
-                                        background: Rectangle { implicitHeight: 44; radius: 8; color: mdInputBg; border.color: parent.activeFocus ? currentThemeColor : mdCardBorder; border.width: parent.activeFocus ? 2 : 1; Behavior on border.color { ColorAnimation { duration: 200 } } Behavior on color { ColorAnimation { duration: 200 } } }
+                                        onTextChanged: inputNameBg.hasError = false
+                                        background: Rectangle {
+                                            id: inputNameBg
+                                            property bool hasError: false
+                                            implicitHeight: 44; radius: 8; color: mdInputBg; border.color: hasError ? "#FF3B30" : (parent.activeFocus ? currentThemeColor : mdCardBorder); border.width: parent.activeFocus || hasError ? 2 : 1; Behavior on border.color { ColorAnimation { duration: 200 } } Behavior on color { ColorAnimation { duration: 200 } }
+                                        }
                                     }
 
                                     Text { text: "尺寸 (宽x高)"; color: mdTextPrimary; font.pixelSize: 14; font.weight: Font.Medium }
@@ -406,6 +419,12 @@ ApplicationWindow {
                                     MouseArea {
                                         id: btnMouse; anchors.fill: parent; hoverEnabled: true
                                         onClicked: {
+                                            if (inputName.text.trim() === "") {
+                                                inputNameBg.hasError = true;
+                                                inputName.forceActiveFocus();
+                                                return;
+                                            }
+                                            inputNameBg.hasError = false;
                                             var comp = Qt.createComponent("DesktopTag.qml");
                                             if (comp.status === Component.Ready) {
                                                 var newId = "tag_" + new Date().getTime();
@@ -420,6 +439,14 @@ ApplicationWindow {
                                                     appBackend.saveNewTag(jsonProps);
                                                     activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": 0 });
                                                     root.requestActivate(); root.raise();
+                                                    tag.tagClosed.connect(function(tid) {
+                                                        for (var i = 0; i < activeTagsModel.count; i++) {
+                                                            if (activeTagsModel.get(i).tagId === tid) {
+                                                                activeTagsModel.remove(i);
+                                                                break;
+                                                            }
+                                                        }
+                                                    });
                                                 }
                                             }
                                         }
@@ -430,62 +457,95 @@ ApplicationWindow {
 
                         // ----------------- Page 1: 管理贴纸 -----------------
                         Item {
-                            ColumnLayout {
-                                anchors.fill: parent; anchors.margins: 48; spacing: 24
-                                Text { text: "管理活动贴纸"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary }
+                            anchors.fill: parent
 
-                                GridView {
-                                    Layout.fillWidth: true; Layout.fillHeight: true
-                                    cellWidth: 260; cellHeight: 140
-                                    model: activeTagsModel
-                                    clip: true
+                            Text {
+                                id: manageTitle
+                                x: 48; y: 48
+                                text: "管理活动贴纸"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary
+                            }
 
-                                    delegate: Rectangle {
-                                        width: 240; height: 120; radius: 12;
-                                        color: mdInputBg
-                                        border.color: mdCardBorder; border.width: 1
+                            GridView {
+                                id: manageGrid
+                                anchors.top: manageTitle.bottom; anchors.topMargin: 24
+                                anchors.left: parent.left; anchors.leftMargin: 48
+                                anchors.right: parent.right; anchors.rightMargin: 48
+                                anchors.bottom: manageHint.top; anchors.bottomMargin: 12
+                                cellWidth: 260; cellHeight: 140
+                                model: activeTagsModel
+                                clip: true
 
-                                        layer.enabled: true
-                                        layer.effect: MultiEffect { shadowEnabled: true; shadowColor: isDarkMode ? Qt.rgba(0,0,0,0.5) : Qt.rgba(0,0,0,0.06); shadowBlur: 3.0; shadowVerticalOffset: 3 }
+                                delegate: Rectangle {
+                                    width: 240; height: 120; radius: 12;
+                                    color: mdInputBg
+                                    border.color: mdCardBorder; border.width: 1
 
-                                        Column {
-                                            anchors.fill: parent; anchors.margins: 20; spacing: 8
-                                            RowLayout {
-                                                width: parent.width; spacing: 10
-                                                Rectangle { width: 14; height: 14; radius: 7; color: model.tagColor; border.width: 1; border.color: mdCardBorder }
-                                                Text { text: model.title; font.weight: Font.DemiBold; color: mdTextPrimary; font.pixelSize: 16; elide: Text.ElideRight; Layout.fillWidth: true }
-                                            }
-                                            Text { text: "映射: " + model.path; color: mdTextSecondary; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
-                                            Text { text: "当前收纳: " + model.fileCount + " 个文件"; color: mdTextSecondary; font.pixelSize: 13 }
+                                    layer.enabled: true
+                                    layer.effect: MultiEffect { shadowEnabled: true; shadowColor: isDarkMode ? Qt.rgba(0,0,0,0.5) : Qt.rgba(0,0,0,0.06); shadowBlur: 3.0; shadowVerticalOffset: 3 }
+
+                                    Column {
+                                        anchors.fill: parent; anchors.margins: 20; spacing: 8
+                                        RowLayout {
+                                            width: parent.width; spacing: 10
+                                            Rectangle { width: 14; height: 14; radius: 7; color: model.tagColor; border.width: 1; border.color: mdCardBorder }
+                                            Text { text: model.title; font.weight: Font.DemiBold; color: mdTextPrimary; font.pixelSize: 16; elide: Text.ElideRight; Layout.fillWidth: true }
                                         }
+                                        Text { text: "映射: " + model.path; color: mdTextSecondary; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
+                                        Text { text: "当前收纳: " + model.fileCount + " 个文件"; color: mdTextSecondary; font.pixelSize: 13 }
+                                    }
 
-                                        Rectangle {
-                                            anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12
-                                            width: 28; height: 28; radius: 14; color: isDarkMode ? "#331111" : "#fce8e6"
-                                            border.color: isDarkMode ? "#ff4444" : "transparent"; border.width: isDarkMode ? 1 : 0
-                                            opacity: delMouse.containsMouse ? 1.0 : 0.0
-                                            Behavior on opacity { NumberAnimation { duration: 200 } }
+                                    Rectangle {
+                                        anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12
+                                        width: 28; height: 28; radius: 14; color: isDarkMode ? "#331111" : "#fce8e6"
+                                        border.color: isDarkMode ? "#ff4444" : "transparent"; border.width: isDarkMode ? 1 : 0
+                                        opacity: delMouse.containsMouse ? 1.0 : 0.0
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
 
-                                            Text { text: "✕"; color: isDarkMode ? "#ff6666" : "#ea4335"; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.centerIn: parent }
-                                            MouseArea {
-                                                id: delMouse; anchors.fill: parent; hoverEnabled: true;
-                                                onClicked: {
-                                                    var targetId = model.tagId;
-                                                    appBackend.removeTagAndRestore(targetId, model.path);
-                                                    if (root.activeTagWindows[targetId]) {
-                                                        root.activeTagWindows[targetId].destroy();
-                                                        var updatedWindows = root.activeTagWindows; delete updatedWindows[targetId]; root.activeTagWindows = updatedWindows;
-                                                    }
-                                                    activeTagsModel.remove(index);
-                                                }
-                                            }
-                                        }
-
+                                        Text { text: "✕"; color: isDarkMode ? "#ff6666" : "#ea4335"; font.pixelSize: 14; font.weight: Font.DemiBold; anchors.centerIn: parent }
                                         MouseArea {
-                                            anchors.fill: parent; hoverEnabled: true; z: -1
-                                            onEntered: delMouse.opacity = 1.0
-                                            onExited: if(!delMouse.containsMouse) delMouse.opacity = 0.0
+                                            id: delMouse; anchors.fill: parent; hoverEnabled: true;
+                                            onClicked: {
+                                                var targetId = model.tagId;
+                                                appBackend.removeTagAndRestore(targetId, model.path);
+                                                if (root.activeTagWindows[targetId]) {
+                                                    root.activeTagWindows[targetId].destroy();
+                                                    var updatedWindows = root.activeTagWindows; delete updatedWindows[targetId]; root.activeTagWindows = updatedWindows;
+                                                }
+                                                activeTagsModel.remove(index);
+                                            }
                                         }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent; hoverEnabled: true; z: -1
+                                        onEntered: delMouse.opacity = 1.0
+                                        onExited: if(!delMouse.containsMouse) delMouse.opacity = 0.0
+                                    }
+                                }
+                            }
+
+                            // 使用提示 — 贴在底部内部
+                            Rectangle {
+                                id: manageHint
+                                anchors.left: parent.left; anchors.leftMargin: 48
+                                anchors.right: parent.right; anchors.rightMargin: 48
+                                anchors.bottom: parent.bottom
+                                height: 40
+                                color: "transparent"
+                                RowLayout {
+                                    anchors.fill: parent
+                                    spacing: 8
+                                    Text {
+                                        text: ""
+                                        font.pixelSize: 16
+                                    }
+                                    Text {
+                                        text: "提示：鼠标悬停到贴纸卡片右上角可显示 ✕ 按钮，点击即可删除该贴纸"
+                                        color: mdTextSecondary
+                                        font.pixelSize: 13
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                        verticalAlignment: Text.AlignVCenter
                                     }
                                 }
                             }
