@@ -132,7 +132,7 @@ Window {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 propagateComposedEvents: false
-                                onClicked: tagMenu.open()
+                                onClicked: { if (tagMenu.opened) tagMenu.close(); else tagMenu.open(); }
                             }
 
                             Popup {
@@ -141,6 +141,7 @@ Window {
                                 x: parent.width - 150
                                 width: 150
                                 padding: 4
+                                closePolicy: Popup.CloseOnEscape
                                 background: Rectangle {
                                     radius: 10
                                     color: "#1D1D1F"
