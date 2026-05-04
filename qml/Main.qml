@@ -8,7 +8,7 @@ ApplicationWindow {
     width: 1050
     height: 700
     visible: true
-    flags: Qt.Window | Qt.FramelessWindowHint
+    flags: Qt.Window
 
     color: "transparent"
 
@@ -54,7 +54,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        // 確保 DWM 動畫相關的原生樣式已設置
+        // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         if (appBackend.initNativeWindow) {
             appBackend.initNativeWindow(root);
         }

@@ -34,22 +34,20 @@ public:
             switch (msg->message) {
             case WM_NCCALCSIZE: {
                 // 將非客戶區設為 0：客戶區 = 完整視窗範圍
-                // → 無透明框、無標題欄、無邊框
                 if (msg->wParam == TRUE) {
-                    // 新版：lParam 指向 NCCALCSIZE_PARAMS
                     NCCALCSIZE_PARAMS *ncp = reinterpret_cast<NCCALCSIZE_PARAMS *>(msg->lParam);
-                    // rgrc[0] = 客戶區, rgrc[1] = 視窗範圍
-                    ncp->rgrc[0] = ncp->rgrc[1];  // 客戶區 = 完整視窗
-                } else {
-                    // 舊版：lParam 指向 RECT
-                    // 直接留空不縮減 → 客戶區即為視窗完整範圍
+                    ncp->rgrc[0] = ncp->rgrc[1];
                 }
                 if (result) *result = 0;
                 return true;
             }
-            case WM_NCHITTEST: {
-                // 不讓 Windows 處理滑鼠與非客戶區的互動
-                if (result) *result = HTCLIENT;
+            case WM_NCACTIVATE: {
+                // 避免 DWM 在最小化還原時因非客戶區為 0 而出錯
+                // 告知 Windows 我們已自行處理非客戶區繪製（什麼都不畫）
+                if (result) *result = TRUE;
+                return true;
+            }
+            case WM_NCHITTEST: {IENT;
                 return true;
             }
             }
@@ -99,18 +97,12 @@ private:
     }
 
 public:
-    // Qt.FramelessWindowHint 建立視窗時不含 WS_CAPTION/WS_THICKFRAME，
-    // 此函數在 Component.onCompleted 中執行，手動補上這些樣式，
-    // 讓 DWM 提供原生動畫，同時由 WinEventFilter 消除視覺上的非客戶區
+    // 確保原生視窗樣式完整，觸發 DWM 重新讀取
     Q_INVOKABLE void initNativeWindow(QQuickWindow* window) {
         if (!window) return;
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
 
-        // 加入完整視窗樣式以啟用 DWM 動畫
-        LONG style = GetWindowLong(hwnd, GWL_STYLE);
-        SetWindowLong(hwnd, GWL_STYLE, style | WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_SYSMENU);
-
-        // 通知 DWM 樣式已變更
+        // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
     }
 

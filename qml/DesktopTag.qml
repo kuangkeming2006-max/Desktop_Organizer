@@ -16,10 +16,10 @@ Window {
     width: tagWidth
     height: tagHeight
     visible: true
-    flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnBottomHint
+    flags: Qt.Window | Qt.WindowStaysOnBottomHint
     color: "transparent"
 
-    // 視窗準備好後設定原生樣式以啟用 DWM 動畫
+    // 觸發 DWM 重新計算非客戶區
     Component.onCompleted: {
         if (appBackend.initNativeWindow) {
             appBackend.initNativeWindow(tagWindow);
