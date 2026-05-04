@@ -232,7 +232,7 @@ ApplicationWindow {
                         border.color: isDarkMode ? Qt.rgba(activeAcc.r, activeAcc.g, activeAcc.b, 0.5) : Qt.rgba(activeAcc.r, activeAcc.g, activeAcc.b, 0.3)
                         border.width: 1
                         y: 10 + root.activeIndex * (menuHeight + menuSpacing)
-                        Behavior on y { NumberAnimation { duration: 500; easing.type: Easing.OutBack; easing.overshoot: 1.8 } }
+                        Behavior on y { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
                         Behavior on color { ColorAnimation { duration: 300 } }
                         Behavior on border.color { ColorAnimation { duration: 300 } }
                     }
@@ -251,17 +251,19 @@ ApplicationWindow {
                                     Behavior on color { ColorAnimation { duration: 150 } }
                                 }
 
-                                Row {
+                                RowLayout {
                                     anchors.left: parent.left; anchors.leftMargin: 24; anchors.verticalCenter: parent.verticalCenter; spacing: 16
                                     Text {
                                         text: model.icon; font.pixelSize: 18
                                         color: root.activeIndex === index ? model.colorCode : mdTextSecondary
                                         Behavior on color { ColorAnimation { duration: 250 } }
+                                        Layout.alignment: Qt.AlignVCenter
                                     }
                                     Text {
                                         text: model.name; font.pixelSize: 15; font.weight: root.activeIndex === index ? Font.DemiBold : Font.Medium
                                         color: root.activeIndex === index ? model.colorCode : mdTextSecondary
                                         Behavior on color { ColorAnimation { duration: 250 } }
+                                        Layout.alignment: Qt.AlignVCenter
                                     }
                                 }
 
