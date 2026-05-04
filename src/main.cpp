@@ -23,16 +23,17 @@
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
 
-// 原生視窗事件過濾器：攔截 WM_NCCALCSIZE 消除非客戶區（透明框），
-// 同時保留 WS_CAPTION 等樣式以觸發 DWM 原生動畫
+// 原生視窗事件過濾器：
+// - 攔截 WM_NCCALCSIZE → 非客戶區設為 0（無透明框、標題欄、邊框）
+// - 保留 WS_CAPTION | WS_THICKFRAME 樣式以觸發 DWM 原生動畫
 class WinEventFilter : public QAbstractNativeEventFilter {
 public:
-    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *) override {
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override {
         if (eventType == "windows_generic_MSG") {
             MSG *msg = static_cast<MSG *>(message);
             if (msg->message == WM_NCCALCSIZE) {
-                // 告訴 Windows 不需要保留非客戶區，整個視窗都是客戶區
-                // 透明框因此消失，但 DWM 仍因 WS_CAPTION 樣式而提供動畫
+                // 整個視窗都是客戶區 → 無透明框/標題欄/邊框
+                if (result) *result = 0;
                 return true;
             }
         }
@@ -81,18 +82,18 @@ private:
     }
 
 public:
-    // 設置原生視窗樣式：加上 WS_CAPTION 等樣式讓 DWM 提供動畫，
+    // 初始化原生視窗樣式：保留 WS_CAPTION | WS_THICKFRAME 以獲得 DWM 動畫，
     // 透明框由 WinEventFilter（攔截 WM_NCCALCSIZE）消除
-    Q_INVOKABLE void setNativeWindowStyle(QQuickWindow* window) {
+    Q_INVOKABLE void initNativeWindow(QQuickWindow* window) {
         if (!window) return;
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
 
-        // 注入 WS_CAPTION 等樣式以激發 DWM 原生動畫（最大/最小化、關閉）
+        // 確保視窗具有可調整大小的邊框樣式以啟用最大化動畫
         LONG style = GetWindowLong(hwnd, GWL_STYLE);
-        SetWindowLong(hwnd, GWL_STYLE, style | WS_CAPTION | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_SYSMENU);
-
-        // 通知 DWM 樣式已變更
-        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        if (!(style & WS_THICKFRAME)) {
+            SetWindowLong(hwnd, GWL_STYLE, style | WS_THICKFRAME);
+            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        }
     }
 
     Q_INVOKABLE QString getRootPath() {

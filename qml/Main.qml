@@ -8,7 +8,8 @@ ApplicationWindow {
     width: 1050
     height: 700
     visible: true
-    flags: Qt.Window | Qt.FramelessWindowHint
+    flags: Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint
+
     color: "transparent"
 
     property int activeIndex: 0
@@ -53,9 +54,9 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        // 呼叫 C++ 方法注入原生視窗樣式以啟用 DWM 動畫
-        if (appBackend.setNativeWindowStyle) {
-            appBackend.setNativeWindowStyle(root);
+        // 確保 DWM 動畫相關的原生樣式已設置
+        if (appBackend.initNativeWindow) {
+            appBackend.initNativeWindow(root);
         }
 
         globalRootPath = appBackend.getRootPath();
