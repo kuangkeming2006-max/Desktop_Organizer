@@ -15,6 +15,37 @@ ApplicationWindow {
     property string globalRootPath: "D:/Stickers"
     property var activeTagWindows: ({})
 
+    // ===== 自製最大化/還原動畫 =====
+    property bool isMaximized: false
+    property int normalX: 0
+    property int normalY: 0
+    property int normalW: 1050
+    property int normalH: 700
+
+    ParallelAnimation {
+        id: maxAnim
+        NumberAnimation { id: maxAnimX; target: root; property: "x"; duration: 200; easing.type: Easing.OutCubic }
+        NumberAnimation { id: maxAnimY; target: root; property: "y"; duration: 200; easing.type: Easing.OutCubic }
+        NumberAnimation { id: maxAnimW; target: root; property: "width"; duration: 200; easing.type: Easing.OutCubic }
+        NumberAnimation { id: maxAnimH; target: root; property: "height"; duration: 200; easing.type: Easing.OutCubic }
+    }
+
+    function toggleMaximize() {
+        if (isMaximized) {
+            maxAnimX.to = normalX; maxAnimY.to = normalY;
+            maxAnimW.to = normalW; maxAnimH.to = normalH;
+            maxAnim.start();
+            isMaximized = false;
+        } else {
+            normalX = root.x; normalY = root.y;
+            normalW = root.width; normalH = root.height;
+            maxAnimX.to = 0; maxAnimY.to = 0;
+            maxAnimW.to = Screen.width; maxAnimH.to = Screen.height;
+            maxAnim.start();
+            isMaximized = true;
+        }
+    }
+
     // ===== 深浅色模式控制 =====
     property bool isDarkMode: false
 
@@ -166,7 +197,7 @@ ApplicationWindow {
                             opacity: maxMouse.containsMouse ? 0.85 : 1.0
                             Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
                             Behavior on opacity { NumberAnimation { duration: 150 } }
-                            MouseArea { id: maxMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.visibility === Window.Maximized ? root.showNormal() : root.showMaximized() }
+                            MouseArea { id: maxMouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.toggleMaximize() }
                         }
                     }
 
