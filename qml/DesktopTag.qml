@@ -23,7 +23,8 @@ Window {
     x: startX
     y: startY
     visible: true
-    flags: Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.FramelessWindowHint
+    // 连 Qt.Tool 和 WindowStaysOnBottomHint 都不需要了，因为桌面的子窗口天生就在底层且不在任务栏
+    flags: Qt.FramelessWindowHint
     // flags: Qt.Tool | Qt.WindowStaysOnBottomHint
     // flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"

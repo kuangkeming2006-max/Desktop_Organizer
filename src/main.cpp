@@ -154,6 +154,41 @@ private:
     }
 
 public:
+    // ==================== 终极桌面注入 ====================
+    Q_INVOKABLE void stickToDesktop(QQuickWindow* window) {
+        if (!window) return;
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+
+        // 1. 找到桌面大管家 Progman
+        HWND progman = FindWindowW(L"Progman", nullptr);
+
+        // 2. 发送未公开的系统玄学消息 0x052C
+        // 这个消息会逼迫 Windows DWM 从 Progman 中分裂出一个纯净的底层壁纸层 (WorkerW)
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, &result);
+
+        // 3. 遍历所有顶层窗口，把刚刚被分离出来的那个壁纸层揪出来
+        static HWND workerW = nullptr;
+        EnumWindows([](HWND topHandle, LPARAM topParamHandle) -> BOOL {
+            // 寻找包含桌面图标的图层 SHELLDLL_DefView
+            HWND p = FindWindowExW(topHandle, nullptr, L"SHELLDLL_DefView", nullptr);
+            if (p != nullptr) {
+                // 桌面图标层的同级下一个 WorkerW，就是我们真正需要的干净壁纸层
+                workerW = FindWindowExW(nullptr, topHandle, L"WorkerW", nullptr);
+            }
+            return TRUE;
+        }, 0);
+
+        // 4. 终极注入：把我们的 QML 贴纸强行认贼作父，变成桌面的子窗口
+        if (workerW) {
+            SetParent(hwnd, workerW);
+            qDebug() << "成功注入到 WorkerW 壁纸层！";
+        } else if (progman) {
+            SetParent(hwnd, progman); // 降级备用方案
+            qDebug() << "降级注入到 Progman！";
+        }
+    }
+
     // ==================== 调用 Windows 原生最大化/还原 ====================
     Q_INVOKABLE void toggleMaximizeNative(QQuickWindow* window) {
         if (!window) return;

@@ -251,10 +251,15 @@ ApplicationWindow {
                     qmlProps.startX = tX;
                     qmlProps.startY = tY;
 
+                    // 直接以 null 作为父对象创建（因为一会儿要在 C++ 里给它找个"干爹"）
                     var tag = comp.createObject(null, qmlProps);
                     if (tag) {
                         root.activeTagWindows[qmlProps.tagId] = tag;
                         tag.show();
+
+                        // 关键：窗口显示出来后，立刻执行 C++ 注入，把它拍死在桌面上
+                        appBackend.stickToDesktop(tag);
+
                         tag.tagClosed.connect(createTagCloser());
                     }
                 }
@@ -578,10 +583,15 @@ ApplicationWindow {
                                                 qmlProps.tagId = newId; delete qmlProps.id;
                                                 qmlProps.startX = pos.x;
                                                 qmlProps.startY = pos.y;
+                                                // 直接以 null 作为父对象创建（因为一会儿要在 C++ 里给它找个"干爹"）
                                                 var tag = comp.createObject(null, qmlProps);
                                                 if (tag) {
                                                     root.activeTagWindows[newId] = tag;
                                                     tag.show();
+
+                                                    // 关键：窗口显示出来后，立刻执行 C++ 注入，把它拍死在桌面上
+                                                    appBackend.stickToDesktop(tag);
+
                                                     appBackend.saveNewTag(jsonProps);
                                                     activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": 0 });
                                                     tag.tagClosed.connect(createTagCloser());
