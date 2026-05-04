@@ -166,6 +166,7 @@ Window {
                                     spacing: 2
                                     Repeater {
                                         model: [
+                                            { text: "修改贴纸名称", action: function() { tagMenu.close(); renameDialog.open(); } },
                                             { text: "打开所在文件夹", action: function() { Qt.openUrlExternally("file:///" + tagWindow.savePath); tagMenu.close(); } },
                                             { text: "关闭并复原文件", action: function() { appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath); tagWindow.destroy(); } }
                                         ]
@@ -297,6 +298,93 @@ Window {
                         let dy = mouse.y - lastPos.y;
                         if (tagWindow.width + dx > 200) tagWindow.width += dx;
                         if (tagWindow.height + dy > 200) tagWindow.height += dy;
+                    }
+                }
+            }
+        }
+    }
+
+    // ===== 修改名称对话窗 =====
+    Dialog {
+        id: renameDialog
+        modal: true
+        dim: false
+        x: (parent.width - width) / 2
+        y: (parent.height - height) / 2
+        width: 220
+        height: 140
+        padding: 16
+        background: Rectangle {
+            radius: 14
+            color: "#F5F5F7"
+            border.color: Qt.rgba(0,0,0,0.08)
+            border.width: 1
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: Qt.rgba(0,0,0,0.15)
+                shadowBlur: 0.5
+                shadowVerticalOffset: 8
+            }
+        }
+
+        Overlay.modal: Rectangle { color: Qt.rgba(0,0,0,0.2) }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Text {
+                text: "修改贴纸名称"
+                font.pixelSize: 16
+                font.weight: Font.Medium
+                color: "#1D1D1F"
+            }
+            TextField {
+                id: renameInput
+                Layout.fillWidth: true
+                text: tagWindow.tagTitle
+                selectByMouse: true
+                font.pixelSize: 14
+                padding: 8
+                background: Rectangle {
+                    radius: 8
+                    color: "white"
+                    border.color: Qt.rgba(0,0,0,0.12)
+                    border.width: 1
+                }
+                onAccepted: renameConfirm.clicked()
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+                Button {
+                    id: renameCancel
+                    text: "取消"
+                    flat: true
+                    focusPolicy: Qt.NoFocus
+                    onClicked: renameDialog.close()
+                }
+                Button {
+                    id: renameConfirm
+                    text: "确定"
+                    focusPolicy: Qt.NoFocus
+                    background: Rectangle {
+                        radius: 8
+                        color: tagColor
+                    }
+                    contentItem: Text {
+                        text: "确定"
+                        color: "white"
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        var newName = renameInput.text.trim();
+                        if (newName.length > 0) {
+                            tagWindow.tagTitle = newName;
+                            appBackend.renameTag(tagWindow.tagId, newName);
+                        }
+                        renameDialog.close();
                     }
                 }
             }
