@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 1. 查找 Qt 库
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Svg)
 
 # 2. Qt 标准项目设置
 qt_standard_project_setup(REQUIRES 6.8)
@@ -16,6 +16,8 @@ qt_standard_project_setup(REQUIRES 6.8)
 qt_add_executable(appDesktop_Tool
     src/main.cpp
     src/filehandler.h
+    resources.qrc
+    app.rc
 )
 
 # 4. 配置 QML 模块 (只定义这一次)
@@ -38,7 +40,7 @@ set_target_properties(appDesktop_Tool PROPERTIES
 
 # 6. 链接库
 target_link_libraries(appDesktop_Tool
-    PRIVATE Qt6::Quick Qt6::Widgets
+    PRIVATE Qt6::Quick Qt6::Widgets Qt6::Svg
     dwmapi
 )
 

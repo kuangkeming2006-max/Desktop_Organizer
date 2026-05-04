@@ -8,8 +8,7 @@ ApplicationWindow {
     width: 1050
     height: 700
     visible: true
-    flags: Qt.Window
-
+    flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
 
     // 攔截關閉事件 → 最小化到系統托盤
@@ -47,35 +46,107 @@ ApplicationWindow {
     property int activeIndex: 0
     property string globalRootPath: "D:/Stickers"
     property var activeTagWindows: ({})
+    // 1. 碰撞檢測：檢查給定的矩形區域是否與現有的貼紙重疊
+    function isRectOverlapping(testX, testY, testW, testH) {
+        for (var key in root.activeTagWindows) {
+            var win = root.activeTagWindows[key];
+            if (!win) continue;
 
-    // ===== 自製最大化/還原動畫 =====
-    property bool isMaximized: false
-    property int normalX: 0
-    property int normalY: 0
-    property int normalW: 1050
-    property int normalH: 700
-
-    ParallelAnimation {
-        id: maxAnim
-        NumberAnimation { id: maxAnimX; target: root; property: "x"; duration: 200; easing.type: Easing.OutCubic }
-        NumberAnimation { id: maxAnimY; target: root; property: "y"; duration: 200; easing.type: Easing.OutCubic }
-        NumberAnimation { id: maxAnimW; target: root; property: "width"; duration: 200; easing.type: Easing.OutCubic }
-        NumberAnimation { id: maxAnimH; target: root; property: "height"; duration: 200; easing.type: Easing.OutCubic }
+            // 包圍盒碰撞算法 (留出 10px 的安全間距)
+            var gap = 10;
+            if (testX < win.x + win.width + gap &&
+                testX + testW + gap > win.x &&
+                testY < win.y + win.height + gap &&
+                testY + testH + gap > win.y) {
+                return true; // 發生重疊
+            }
+        }
+        return false; // 當前位置是空的
     }
 
-    function toggleMaximize() {
-        if (isMaximized) {
-            maxAnimX.to = normalX; maxAnimY.to = normalY;
-            maxAnimW.to = normalW; maxAnimH.to = normalH;
-            maxAnim.start();
-            isMaximized = false;
+    // 2. 智能放置：從右上角開始掃描，尋找第一個不重疊的合適位置
+    function findBestTagPosition(tagW, tagH) {
+        var margin = 30;
+        var gap = 20;
+
+        // 獲取當前螢幕可用尺寸 (防多屏導致的總寬度過大，做個基礎限制)
+        var screenW = Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : 1920;
+        var screenH = Screen.desktopAvailableHeight > 0 ? Screen.desktopAvailableHeight : 1080;
+
+        // 強行規避多屏導致的超大解析度 (比如 3840)，確保貼紙落在主視口內
+        if (screenW > 3000) screenW = screenW / 2;
+
+        var startX = screenW - tagW - margin;
+        var startY = margin;
+
+        var testX = startX;
+        var testY = startY;
+
+        // 最多嘗試掃描 50 個網格位置，防止死循環
+        for (var i = 0; i < 50; i++) {
+            if (!isRectOverlapping(testX, testY, tagW, tagH)) {
+                break; // 找到空位了！
+            }
+
+            // 沒找到，往下移一格
+            testY += tagH + gap;
+
+            // 如果到底部了，換到左邊一列，Y 重置到頂部
+            if (testY + tagH > screenH) {
+                testY = startY;
+                testX -= (tagW + gap);
+            }
+        }
+
+        // 【終極安全鉗制】：無論如何計算，絕對不允許超出當前螢幕邊界
+        testX = Math.max(10, Math.min(testX, screenW - tagW - 10));
+        testY = Math.max(10, Math.min(testY, screenH - tagH - 10));
+
+        return { x: testX, y: testY };
+    }
+
+    // 創建 DesktopTag 元件（處理非同步載入）
+    function createTagComponent(callback) {
+        var comp = Qt.createComponent("DesktopTag.qml");
+        if (comp.status === Component.Ready) {
+            callback(comp);
+        } else if (comp.status === Component.Loading) {
+            comp.statusChanged.connect(function() {
+                if (comp.status === Component.Ready) {
+                    callback(comp);
+                } else {
+                    console.error("Failed to load DesktopTag.qml:", comp.errorString());
+                }
+            });
         } else {
-            normalX = root.x; normalY = root.y;
-            normalW = root.width; normalH = root.height;
-            maxAnimX.to = 0; maxAnimY.to = 0;
-            maxAnimW.to = Screen.desktopAvailableWidth; maxAnimH.to = Screen.desktopAvailableHeight;
-            maxAnim.start();
-            isMaximized = true;
+            console.error("Failed to load DesktopTag.qml:", comp.errorString());
+        }
+    }
+
+    // 工廠方法創建 tagClosed 連接器（避免 for 迴圈閉包問題）
+    function createTagCloser() {
+        return function(tid) {
+            // 清理模型
+            for (var i = 0; i < activeTagsModel.count; i++) {
+                if (activeTagsModel.get(i).tagId === tid) {
+                    activeTagsModel.remove(i);
+                    break;
+                }
+            }
+            // 【新增】：清理字典，防止幽灵对象
+            if (root.activeTagWindows[tid]) {
+                root.activeTagWindows[tid].destroy();
+                var updatedWindows = root.activeTagWindows;
+                delete updatedWindows[tid];
+                root.activeTagWindows = updatedWindows;
+            }
+        };
+    }
+
+    // ===== 使用 Windows 原生 DWM 最大化/還原動畫（無抽搐） =====
+    function toggleMaximize() {
+        if (appBackend.toggleMaximizeNative) {
+            appBackend.toggleMaximizeNative(root);
         }
     }
 
@@ -129,35 +200,65 @@ ApplicationWindow {
 
         globalRootPath = appBackend.getRootPath();
         var savedTags = appBackend.getSavedTags();
-        var comp = Qt.createComponent("DesktopTag.qml");
+        if (savedTags.length > 0) {
 
-        for (var i = 0; i < savedTags.length; i++) {
-            var tagData = savedTags[i];
-            activeTagsModel.append({
-                "tagId": tagData.id,
-                "title": tagData.tagTitle,
-                "path": tagData.savePath,
-                "tagColor": tagData.tagColor,
-                "fileCount": 0
-            });
+            var screenW = Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : 1920;
+            var screenH = Screen.desktopAvailableHeight > 0 ? Screen.desktopAvailableHeight : 1080;
+            if (screenW > 3000) screenW = screenW / 2; // 防多屏漂移
 
-            if (comp.status === Component.Ready) {
-                var qmlProps = Object.assign({}, tagData);
-                qmlProps.tagId = qmlProps.id;
-                delete qmlProps.id;
-                var tag = comp.createObject(null, qmlProps);
-                if (tag) {
-                    root.activeTagWindows[qmlProps.tagId] = tag;
-                    tag.tagClosed.connect(function(tid) {
-                        for (var i = 0; i < activeTagsModel.count; i++) {
-                            if (activeTagsModel.get(i).tagId === tid) {
-                                activeTagsModel.remove(i);
-                                break;
-                            }
-                        }
+            createTagComponent(function(comp) {
+                for (var i = 0; i < savedTags.length; i++) {
+                    var tagData = savedTags[i];
+                    activeTagsModel.append({
+                        "tagId": tagData.id,
+                        "title": tagData.tagTitle,
+                        "path": tagData.savePath,
+                        "tagColor": tagData.tagColor,
+                        "fileCount": 0
                     });
+
+                    var qmlProps = Object.assign({}, tagData);
+                    qmlProps.tagId = qmlProps.id;
+                    delete qmlProps.id;
+
+                    var tW = qmlProps.tagWidth || 220;
+                    var tH = qmlProps.tagHeight || 280;
+                    var tX = qmlProps.x;
+                    var tY = qmlProps.y;
+
+                    if (tX === undefined || tY === undefined) {
+                        var pos = root.findBestTagPosition(tW, tH);
+                        tX = pos.x;
+                        tY = pos.y;
+                    } else {
+                        // ==========================================
+                        // 【越界抢救逻辑】：检查保存的坐标是否飞出当前屏幕
+                        // ==========================================
+                        var needsRescue = false;
+
+                        if (tX + tW > screenW) { tX = screenW - tW - 20; needsRescue = true; } // 右溢出
+                        if (tX < 0) { tX = 20; needsRescue = true; }                           // 左溢出
+                        if (tY + tH > screenH) { tY = screenH - tH - 20; needsRescue = true; } // 底溢出
+                        if (tY < 0) { tY = 20; needsRescue = true; }                           // 顶溢出
+
+                        // 如果发生了抢救，立即通知 C++ 后端更新配置文件里的错误坐标
+                        if (needsRescue && appBackend.updateTagGeometry) {
+                            appBackend.updateTagGeometry(qmlProps.tagId, tX, tY, tW, tH);
+                            console.log("已修复越界贴纸:", qmlProps.tagId, " 新坐标:", tX, tY);
+                        }
+                    }
+
+                    qmlProps.startX = tX;
+                    qmlProps.startY = tY;
+
+                    var tag = comp.createObject(null, qmlProps);
+                    if (tag) {
+                        root.activeTagWindows[qmlProps.tagId] = tag;
+                        tag.show();
+                        tag.tagClosed.connect(createTagCloser());
+                    }
                 }
-            }
+            });
         }
     }
 
@@ -462,30 +563,31 @@ ApplicationWindow {
                                                 return;
                                             }
                                             inputNameBg.hasError = false;
-                                            var comp = Qt.createComponent("DesktopTag.qml");
-                                            if (comp.status === Component.Ready) {
-                                                var newId = "tag_" + new Date().getTime();
-                                                var jsonProps = {
-                                                    "id": newId, "tagTitle": inputName.text, "tagWidth": parseInt(inputW.text), "tagHeight": parseInt(inputH.text), "tagColor": inputColor.text, "savePath": inputPath.text, "allowedExts": inputExt.text
-                                                };
+                                            var newId = "tag_" + new Date().getTime();
+                                            var tagW = parseInt(inputW.text);
+                                            var tagH = parseInt(inputH.text);
+                                            var pos = root.findBestTagPosition(tagW, tagH);
+                                            var jsonProps = {
+                                                "id": newId, "tagTitle": inputName.text,
+                                                "tagWidth": tagW, "tagHeight": tagH,
+                                                "tagColor": inputColor.text,
+                                                "savePath": inputPath.text, "allowedExts": inputExt.text
+                                            };
+                                            createTagComponent(function(comp) {
                                                 var qmlProps = Object.assign({}, jsonProps);
                                                 qmlProps.tagId = newId; delete qmlProps.id;
+                                                qmlProps.startX = pos.x;
+                                                qmlProps.startY = pos.y;
                                                 var tag = comp.createObject(null, qmlProps);
                                                 if (tag) {
                                                     root.activeTagWindows[newId] = tag;
+                                                    tag.show();
                                                     appBackend.saveNewTag(jsonProps);
                                                     activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": 0 });
-                                                    root.requestActivate(); root.raise();
-                                                    tag.tagClosed.connect(function(tid) {
-                                                        for (var i = 0; i < activeTagsModel.count; i++) {
-                                                            if (activeTagsModel.get(i).tagId === tid) {
-                                                                activeTagsModel.remove(i);
-                                                                break;
-                                                            }
-                                                        }
-                                                    });
+                                                    tag.tagClosed.connect(createTagCloser());
                                                 }
-                                            }
+                                                console.log("🚀 新贴纸已生成！真实坐标 X:", tag.x, " Y:", tag.y, " 尺寸 W:", tag.width, " H:", tag.height, " 可见性:", tag.visible);
+                                            });
                                         }
                                     }
                                 }
@@ -669,8 +771,8 @@ ApplicationWindow {
                                     Text { text: "❖"; font.pixelSize: 36; color: mdTextPrimary; anchors.centerIn: parent }
                                 }
 
-                                Text { text: "Desktop Tool v0.7.1"; color: mdTextPrimary; font.pixelSize: 22; font.weight: Font.Bold; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 10 }
-                                Text { text: "纯色云母 UI - Dark/Light"; color: mdTextSecondary; font.pixelSize: 15; font.weight: Font.Medium; Layout.alignment: Qt.AlignHCenter }
+                                Text { text: "迭戈🤮"; color: mdTextPrimary; font.pixelSize: 22; font.weight: Font.Bold; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 10 }
+                                Text { text: ""; color: mdTextSecondary; font.pixelSize: 15; font.weight: Font.Medium; Layout.alignment: Qt.AlignHCenter }
                             }
                         }
                     }

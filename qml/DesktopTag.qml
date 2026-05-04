@@ -12,21 +12,45 @@ Window {
     property color tagColor: "#0b57d0"
     property string savePath: "D:/"
     property string allowedExts: ""
+    // 起始位置（由 Main.qml 級聯計算或還原保存值）
+    property int startX: 100
+    property int startY: 100
 
     signal tagClosed(string tagId)
 
     width: tagWidth
     height: tagHeight
+    x: startX
+    y: startY
     visible: true
-    flags: Qt.Tool | Qt.WindowStaysOnBottomHint
+    flags: Qt.Tool | Qt.WindowStaysOnBottomHint | Qt.FramelessWindowHint
+    // flags: Qt.Tool | Qt.WindowStaysOnBottomHint
+    // flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
 
-    // 觸發 DWM 重新計算非客戶區
+    // 觸發 DWM 重新計算非客戶區，且使用初始位置
     Component.onCompleted: {
         if (appBackend.initNativeWindow) {
             appBackend.initNativeWindow(tagWindow);
         }
     }
+
+    // 位置/尺寸變化後延遲保存（去抖 800ms）
+    Timer {
+        id: saveGeoDebounce
+        interval: 800
+        onTriggered: {
+            if (appBackend.updateTagGeometry) {
+                appBackend.updateTagGeometry(tagWindow.tagId,
+                    tagWindow.x, tagWindow.y,
+                    tagWindow.width, tagWindow.height);
+            }
+        }
+    }
+    onXChanged: saveGeoDebounce.restart()
+    onYChanged: saveGeoDebounce.restart()
+    onWidthChanged: saveGeoDebounce.restart()
+    onHeightChanged: saveGeoDebounce.restart()
 
     ListModel { id: fileModel }
 
@@ -48,6 +72,12 @@ Window {
             radius: outerRadius
             color: "#F5F5F7"
 
+            // 墊底的 MouseArea：點擊卡片空白處時置頂
+            MouseArea {
+                anchors.fill: parent
+                onPressed: tagWindow.raise()
+            }
+
             // 内白边（Apple 招牌 inset border）
             Rectangle {
                 anchors.fill: parent
@@ -55,15 +85,6 @@ Window {
                 color: "transparent"
                 border.color: Qt.rgba(1, 1, 1, 0.8)
                 border.width: 1
-            }
-
-            // Apple 风格阴影
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                shadowEnabled: true
-                shadowColor: Qt.rgba(0, 0, 0, 0.12)
-                shadowBlur: 0.6
-                shadowVerticalOffset: 14
             }
 
             // ===== 布局 =====
@@ -83,7 +104,10 @@ Window {
                     // 拖拽區（放在最底層，不遮擋按鈕）
                     MouseArea {
                         anchors.fill: parent
-                        onPressed: tagWindow.startSystemMove()
+                        onPressed: {
+                            tagWindow.raise();          // 被抓取時主動提權
+                            tagWindow.startSystemMove();
+                        }
                     }
 
                     // 极淡边框增加立体感
@@ -267,14 +291,12 @@ Window {
             }
         }
 
-        // --- 右下角拉伸手柄 (圆弧提示 + 缩放光标) ---
+        // --- 右下角拉伸手柄 (iPadOS 极简圆弧) ---
         Item {
             id: resizeHandle
-            width: 28; height: 28
+            width: 36; height: 36
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            anchors.rightMargin: 4
-            anchors.bottomMargin: 4
             z: 10
 
             Canvas {
@@ -282,17 +304,21 @@ Window {
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.reset();
-                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.15);
-                    ctx.lineWidth = 2;
+
+                    // iPadOS 风格的圆润粗线条
+                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.25); // 柔和的半透明灰色
+                    ctx.lineWidth = 4;
                     ctx.lineCap = "round";
-                    // 画三条圆弧线，从外到内
-                    var cx = 24, cy = 24, gap = 5;
-                    for (var i = 0; i < 3; i++) {
-                        var r = 6 + i * gap;
-                        ctx.beginPath();
-                        ctx.arc(cx, cy, r, 0.75 * Math.PI, Math.PI);
-                        ctx.stroke();
-                    }
+
+                    // 巧妙的几何计算：为了视觉上协调，圆弧应当与卡片的圆角(outerRadius: 28)同心
+                    var cx = 8;
+                    var cy = 8;
+                    var r = 16;
+
+                    ctx.beginPath();
+                    // 从 0 度（水平向右）画到 90 度（垂直向下），形成内收的完美圆弧
+                    ctx.arc(cx, cy, r, 0, Math.PI / 2);
+                    ctx.stroke();
                 }
             }
 
@@ -300,7 +326,10 @@ Window {
                 anchors.fill: parent
                 cursorShape: Qt.SizeFDiagCursor
                 property point lastPos
-                onPressed: (mouse) => lastPos = Qt.point(mouse.x, mouse.y)
+                onPressed: (mouse) => {
+                    tagWindow.raise();                  // 準備縮放時主動提權
+                    lastPos = Qt.point(mouse.x, mouse.y);
+                }
                 onPositionChanged: (mouse) => {
                     if (pressed) {
                         let dx = mouse.x - lastPos.x;

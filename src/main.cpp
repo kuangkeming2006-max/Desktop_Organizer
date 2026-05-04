@@ -22,6 +22,7 @@
 #include <QAction>
 #include <QPointer>
 #include <QPixmap>
+#include <QSet>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dwmapi.h>
@@ -29,6 +30,7 @@
 #pragma comment(lib, "user32.lib")
 
 // 原生視窗事件過濾器：
+// - 使用 QSet<HWND> 白名單管理受影響的視窗
 // - 攔截 WM_NCCALCSIZE → 非客戶區設為 0（無透明框、標題欄、邊框）
 // - 保留 WS_CAPTION | WS_THICKFRAME 樣式以觸發 DWM 原生動畫
 class WinEventFilter : public QAbstractNativeEventFilter {
@@ -37,30 +39,63 @@ public:
 
     WinEventFilter() { s_instance = this; }
 
-    void setHwnd(HWND h) { m_hwnd = h; }
+    // 【新增】：將窗口加入無邊框白名單
+    void addWindow(HWND h) {
+        if (h) {
+            m_hwnds.insert(h);
+        }
+    }
 
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override {
         if (eventType == "windows_generic_MSG") {
             MSG *msg = static_cast<MSG *>(message);
+
+            // 【核心防線】：如果當前觸發消息的窗口不在我們的白名單裡，直接放行！
+            // 這可以保護你的右鍵菜單、Tooltip 等標準 Qt 控件不被破壞渲染。
+            if (!m_hwnds.contains(msg->hwnd)) {
+                return false;
+            }
+
             switch (msg->message) {
             case WM_NCCALCSIZE: {
                 if (msg->wParam == TRUE) {
                     NCCALCSIZE_PARAMS *ncp = reinterpret_cast<NCCALCSIZE_PARAMS *>(msg->lParam);
                     ncp->rgrc[0] = ncp->rgrc[1];
+                    if (result) *result = 0;
+                    return true;
                 }
-                if (result) *result = 0;
-                return true;
+                return false;
             }
             case WM_NCACTIVATE: {
                 if (result) *result = TRUE;
                 return true;
             }
+            // 限制最大化時不要遮擋任務欄，且修正邊緣溢出
+            case WM_GETMINMAXINFO: {
+                MINMAXINFO *mmi = reinterpret_cast<MINMAXINFO *>(msg->lParam);
+                HMONITOR monitor = MonitorFromWindow(msg->hwnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi;
+                mi.cbSize = sizeof(MONITORINFO);
+                GetMonitorInfo(monitor, &mi);
+                mmi->ptMaxSize.x = mi.rcWork.right - mi.rcWork.left;
+                mmi->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
+                mmi->ptMaxPosition.x = mi.rcWork.left - mi.rcMonitor.left;
+                mmi->ptMaxPosition.y = mi.rcWork.top - mi.rcMonitor.top;
+                if (result) *result = 0;
+                return true;
+            }
             case WM_SHOWWINDOW: {
-                if (msg->wParam == TRUE && m_hwnd) {
-                    // 備份：觸發 DWM 框架重算，讓 WM_NCCALCSIZE 重新消除非客戶區
-                    SetWindowPos(m_hwnd, nullptr, 0, 0, 0, 0,
+                if (msg->wParam == TRUE) {
+                    // 【修正】：使用當前獨立觸發事件的 msg->hwnd，而不是被覆蓋的 m_hwnd
+                    SetWindowPos(msg->hwnd, nullptr, 0, 0, 0, 0,
                                  SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
                 }
+                return false;
+            }
+            case WM_NCDESTROY: {
+                // 【亮點功能：自動 GC】：當窗口（比如貼紙）被徹底銷毀時，
+                // Windows 會發送 WM_NCDESTROY。我們在此處將其移出白名單，防止內存洩漏和野指針。
+                m_hwnds.remove(msg->hwnd);
                 return false;
             }
             }
@@ -68,7 +103,7 @@ public:
         return false;
     }
 private:
-    HWND m_hwnd = nullptr;
+    QSet<HWND> m_hwnds; // 使用 QSet 存儲所有白名單窗口句柄
     static WinEventFilter* s_instance;
 };
 WinEventFilter* WinEventFilter::s_instance = nullptr;
@@ -119,6 +154,25 @@ private:
     }
 
 public:
+    // ==================== 调用 Windows 原生最大化/还原 ====================
+    Q_INVOKABLE void toggleMaximizeNative(QQuickWindow* window) {
+        if (!window) return;
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+
+        // 获取当前窗口的原生状态
+        WINDOWPLACEMENT wp;
+        wp.length = sizeof(WINDOWPLACEMENT);
+        if (GetWindowPlacement(hwnd, &wp)) {
+            // 如果已经是最大化状态，则原生还原
+            if (wp.showCmd == SW_SHOWMAXIMIZED) {
+                ShowWindow(hwnd, SW_RESTORE);
+            } else {
+                // 否则，原生最大化
+                ShowWindow(hwnd, SW_MAXIMIZE);
+            }
+        }
+    }
+
     // 確保原生視窗樣式完整，觸發 DWM 重新讀取
     Q_INVOKABLE void initNativeWindow(QQuickWindow* window) {
         if (!window) return;
@@ -127,7 +181,15 @@ public:
 #ifdef Q_OS_WIN
         // 將 HWND 註冊到原生事件過濾器（用於 WM_SHOWWINDOW 刷新）
         if (WinEventFilter::instance())
-            WinEventFilter::instance()->setHwnd(hwnd);
+            WinEventFilter::instance()->addWindow(hwnd);
+
+        // ==========================================
+        // 【关键修复】：补回被 Qt.FramelessWindowHint 强制剥夺的原生窗口样式
+        // 加上这些样式，Windows DWM 才会接管动画和窗口状态管理
+        // ==========================================
+        LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
+        style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+        SetWindowLongPtr(hwnd, GWL_STYLE, style);
 
         // 啟用持久場景圖與圖形資源：最小化/隱藏後不會釋放渲染緩衝，避免還原後變透明
         window->setPersistentSceneGraph(true);
@@ -240,7 +302,25 @@ public:
         qDebug() << "Tag" << tagId << "removed and files restored.";
     }
 
-    // 6. 修改贴纸名称
+    // 6. 更新贴纸位置和尺寸（每次拖拽/調整後保存）
+    Q_INVOKABLE void updateTagGeometry(const QString &tagId, int x, int y, int w, int h) {
+        QJsonArray tags = m_config["tags"].toArray();
+        for (int i = 0; i < tags.size(); ++i) {
+            QJsonObject obj = tags[i].toObject();
+            if (obj["id"].toString() == tagId) {
+                obj["x"] = x;
+                obj["y"] = y;
+                obj["tagWidth"] = w;
+                obj["tagHeight"] = h;
+                tags[i] = obj;
+                break;
+            }
+        }
+        m_config["tags"] = tags;
+        saveConfig();
+    }
+
+    // 7. 修改贴纸名称
     Q_INVOKABLE void renameTag(const QString &tagId, const QString &newTitle) {
         QJsonArray tags = m_config["tags"].toArray();
         for (int i = 0; i < tags.size(); ++i) {
@@ -269,7 +349,7 @@ public:
         m_trayIcon = new QSystemTrayIcon(this);
 
         // 使用應用程式圖示，若無則建立一個簡單的色塊圖示
-        QIcon appIcon = QIcon(":/assets/app_icon.ico");
+        QIcon appIcon = QIcon(":/sticker.ico");
         if (appIcon.isNull()) {
             QPixmap pm(32, 32);
             pm.fill(Qt::darkGray);
@@ -354,12 +434,12 @@ int main(int argc, char *argv[])
 #endif
 
     QApplication app(argc, argv);
-
+    app.setWindowIcon(QIcon(":/assets/app_icon.ico"));
     // 设置应用元数据 (在注册表和任务管理器中显示)
     app.setOrganizationName("SYSU CyberSec");
     app.setOrganizationDomain("sysu.edu.cn");
     app.setApplicationName("Desktop Organizer");
-    app.setWindowIcon(QIcon(":/assets/app_icon.ico"));
+    app.setWindowIcon(QIcon(":/sticker.ico"));
 
     QQmlApplicationEngine engine;
 

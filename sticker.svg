@@ -1,0 +1,7 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- 贴纸的轮廓主体，带有圆角 -->
+  <path d="M5 6C5 4.89543 5.89543 4 7 4H17C18.1046 4 19 4.89543 19 6V15L15 19H7C5.89543 19 5 18.1046 5 17V6Z" 
+        stroke="#555555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="#F5F5F7"/>
+  <path d="M15 19V16C15 14.8954 15.8954 14 17 14H19" 
+        stroke="#555555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
