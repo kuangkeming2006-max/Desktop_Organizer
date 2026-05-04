@@ -193,6 +193,21 @@ public:
         saveConfig(); // 最终落盘
         qDebug() << "Tag" << tagId << "removed and files restored.";
     }
+
+    // 6. 修改贴纸名称
+    Q_INVOKABLE void renameTag(const QString &tagId, const QString &newTitle) {
+        QJsonArray tags = m_config["tags"].toArray();
+        for (int i = 0; i < tags.size(); ++i) {
+            QJsonObject obj = tags[i].toObject();
+            if (obj["id"].toString() == tagId) {
+                obj["tagTitle"] = newTitle;
+                tags[i] = obj;
+                break;
+            }
+        }
+        m_config["tags"] = tags;
+        saveConfig();
+    }
 };
 
 // ======================================================================
