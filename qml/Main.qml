@@ -232,7 +232,7 @@ ApplicationWindow {
                         border.color: isDarkMode ? Qt.rgba(activeAcc.r, activeAcc.g, activeAcc.b, 0.5) : Qt.rgba(activeAcc.r, activeAcc.g, activeAcc.b, 0.3)
                         border.width: 1
                         y: 10 + root.activeIndex * (menuHeight + menuSpacing)
-                        Behavior on y { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
+                        Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
                         Behavior on color { ColorAnimation { duration: 300 } }
                         Behavior on border.color { ColorAnimation { duration: 300 } }
                     }

@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -7,8 +7,8 @@ Window {
     id: tagWindow
     property string tagId: ""
     property string tagTitle: "新建标签"
-    property int tagWidth: 220
-    property int tagHeight: 280
+    property int tagWidth: 250
+    property int tagHeight: Math.round(250 * 1.618)   // 黄金比例 ≈ 405
     property color tagColor: "#0b57d0"
     property string savePath: "D:/"
     property string allowedExts: ""
@@ -21,162 +21,206 @@ Window {
 
     ListModel { id: fileModel }
 
-    // --- 主容器 ---
+    // ===== Apple 黄金比例设计常数 =====
+    readonly property int outerRadius: 28
+    readonly property int cardPadding: 6
+    readonly property int capsuleRadius: outerRadius - cardPadding   // 同心圆角 22
+    readonly property int capsuleHeight: 66
+
+    // --- 主卡片（边距 1px 防抗锯齿切边）---
     Item {
-        id: mainContainer
         anchors.fill: parent
-        // 这里的边距用于留出极其微小的空间防止抗锯齿切边，但不产生阴影
         anchors.margins: 1
 
-        // --- 1. 背景模糊层 (边缘清晰的关键：不直接在边框层做模糊) ---
+        // ---- 卡片本体 + Apple 多层阴影 ----
         Rectangle {
-            id: backgroundBlur
+            id: cardBody
             anchors.fill: parent
-            radius: 12 // 扁平化通常采用适中的圆角
-            color: hoverArea.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : Qt.rgba(1, 1, 1, 0.15)
+            radius: outerRadius
+            color: "#F5F5F7"
 
-            // 仅对背景内容开启模糊，不影响边框
+            // 内白边（Apple 招牌 inset border）
+            Rectangle {
+                anchors.fill: parent
+                radius: outerRadius
+                color: "transparent"
+                border.color: Qt.rgba(1, 1, 1, 0.8)
+                border.width: 1
+            }
+
+            // Apple 风格阴影
             layer.enabled: true
             layer.effect: MultiEffect {
-                blurEnabled: true
-                blur: 0.7
+                shadowEnabled: true
+                shadowColor: Qt.rgba(0, 0, 0, 0.12)
+                shadowBlur: 0.6
+                shadowVerticalOffset: 14
             }
 
-            Behavior on color { ColorAnimation { duration: 250 } }
-        }
+            // ===== 布局 =====
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: cardPadding
+                spacing: 0
 
-        // --- 2. 扁平化边框层 (确保边缘绝对清晰) ---
-        Rectangle {
-            anchors.fill: parent
-            radius: 12
-            color: "transparent"
-            border.color: Qt.rgba(1, 1, 1, 0.4) // 清晰的浅色描边
-            border.width: 1
-        }
-
-        // --- 3. 内容布局层 ---
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 0
-
-            // --- 顶部标题栏：内切重合 + 同宽 ---
-            Rectangle {
-                id: headerBar
-                Layout.fillWidth: true
-                Layout.preferredHeight: 40
-                // 顶部圆角与外框一致，底部圆角为0实现“内切”效果
-                radius: 12
-                color: Qt.rgba(tagColor.r, tagColor.g, tagColor.b, 0.85)
-
-                // 遮盖层：利用一个小矩形遮掉 headerBar 底部的圆角，使其与下方内容无缝衔接
+                // --- 顶部深灰胶囊（内切圆角）---
                 Rectangle {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                    height: parent.radius
-                    color: parent.color
-                    visible: true
-                }
+                    id: headerCapsule
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: capsuleHeight
+                    radius: capsuleRadius
+                    color: "#1D1D1F"
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 15
-                    anchors.rightMargin: 8
-
-                    Text {
-                        id: nameText
-                        text: tagWindow.tagTitle
-                        color: "white"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                        Layout.fillWidth: true
-                        elide: Text.ElideRight
-                    }
-
-                    Button {
-                        Layout.preferredWidth: 26; Layout.preferredHeight: 26
-                        background: null
-                        contentItem: Text { text: "⋮"; font.pixelSize: 18; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                        onClicked: tagMenu.open()
-                        Menu {
-                            id: tagMenu
-                            MenuItem { text: "打开所在文件夹"; onTriggered: Qt.openUrlExternally("file:///" + tagWindow.savePath) }
-                            MenuItem {
-                                text: "关闭并复原文件"
-                                onTriggered: {
-                                    appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath);
-                                    tagWindow.destroy();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // --- 文件展示区 ---
-            GridView {
-                id: fileGrid
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.margins: 8
-                cellWidth: width / 3 // 自动平分宽度
-                cellHeight: 80
-                model: fileModel
-                clip: true
-
-                delegate: Item {
-                    width: fileGrid.cellWidth; height: 80
-                    Column {
-                        anchors.centerIn: parent; spacing: 4
-                        Rectangle {
-                            width: 42; height: 42; radius: 8
-                            color: Qt.rgba(tagColor.r, tagColor.g, tagColor.b, 0.1)
-                            Text { text: "📄"; anchors.centerIn: parent; font.pixelSize: 22 }
-                        }
-                        Text {
-                            text: model.fileName
-                            font.pixelSize: 11; width: parent.width - 10; color: "#2c2c2c"
-                            elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter
-                        }
-                    }
-                    MouseArea {
+                    // 极淡边框增加立体感
+                    Rectangle {
                         anchors.fill: parent
-                        onDoubleClicked: Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName)
+                        radius: capsuleRadius
+                        color: "transparent"
+                        border.color: Qt.rgba(0, 0, 0, 0.12)
+                        border.width: 1
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 18
+                        anchors.rightMargin: 8
+
+                        // 标签色小圆点（取代整条彩色标题列）
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: tagColor
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        Text {
+                            text: tagWindow.tagTitle
+                            color: "#F5F5F7"
+                            font.pixelSize: 16
+                            font.weight: Font.Medium
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        Button {
+                            Layout.preferredWidth: 30; Layout.preferredHeight: 30
+                            Layout.alignment: Qt.AlignVCenter
+                            background: Rectangle {
+                                radius: 15
+                                color: parent.containsMouse ? Qt.rgba(1,1,1,0.12) : "transparent"
+                            }
+                            contentItem: Text {
+                                text: "\u22EF"
+                                font.pixelSize: 22
+                                color: "#F5F5F7"
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            onClicked: tagMenu.open()
+                            Menu {
+                                id: tagMenu
+                                MenuItem { text: "打开所在文件夹"; onTriggered: Qt.openUrlExternally("file:///" + tagWindow.savePath) }
+                                MenuItem {
+                                    text: "关闭并复原文件"
+                                    onTriggered: {
+                                        appBackend.removeTagAndRestore(tagWindow.tagId, tagWindow.savePath);
+                                        tagWindow.destroy();
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
-                DropArea {
-                    anchors.fill: parent
-                    onDropped: (drop) => {
-                        if (drop.hasUrls) {
-                            for (var i = 0; i < drop.urls.length; i++) {
-                                var urlStr = drop.urls[i].toString();
-                                if (appBackend.moveFileToTag(urlStr, tagWindow.savePath)) {
-                                    var fName = urlStr.substring(urlStr.lastIndexOf("/") + 1);
-                                    fileModel.append({ "fileName": fName });
+                // --- 内容区：大面积留白 + 档案网格 ---
+                Item {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.topMargin: 18
+                    Layout.bottomMargin: 8
+                    Layout.leftMargin: 10
+                    Layout.rightMargin: 10
+
+                    GridView {
+                        id: fileGrid
+                        anchors.fill: parent
+                        cellWidth: width / 3
+                        cellHeight: 90
+                        model: fileModel
+                        clip: true
+
+                        delegate: Item {
+                            width: fileGrid.cellWidth; height: 90
+                            Column {
+                                anchors.centerIn: parent; spacing: 6
+                                Rectangle {
+                                    width: 44; height: 44; radius: 10
+                                    color: Qt.rgba(tagColor.r, tagColor.g, tagColor.b, 0.1)
+                                    Text {
+                                        text: "\uD83D\uDCC4"
+                                        anchors.centerIn: parent
+                                        font.pixelSize: 22
+                                    }
+                                }
+                                Text {
+                                    text: model.fileName
+                                    font.pixelSize: 12
+                                    color: "#1D1D1F"
+                                    width: parent.width - 6
+                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignHCenter
+                                    font.weight: Font.Medium
                                 }
                             }
-                            drop.accept();
+                            MouseArea {
+                                anchors.fill: parent
+                                onDoubleClicked: Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName)
+                            }
+                        }
+
+                        DropArea {
+                            anchors.fill: parent
+                            onDropped: (drop) => {
+                                if (drop.hasUrls) {
+                                    for (var i = 0; i < drop.urls.length; i++) {
+                                        var urlStr = drop.urls[i].toString();
+                                        if (appBackend.moveFileToTag(urlStr, tagWindow.savePath)) {
+                                            var fName = urlStr.substring(urlStr.lastIndexOf("/") + 1);
+                                            fileModel.append({ "fileName": fName });
+                                        }
+                                    }
+                                    drop.accept();
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // --- 交互层 ---
+        // --- 拖动区域（仅顶部胶囊区域可拖动）---
         MouseArea {
-            id: hoverArea
-            anchors.fill: parent
-            z: -1
-            hoverEnabled: true
+            id: dragArea
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.topMargin: cardPadding
+            anchors.leftMargin: cardPadding
+            anchors.rightMargin: cardPadding
+            height: capsuleHeight
+            z: 10
+            cursorShape: Qt.OpenHandCursor
             onPressed: tagWindow.startSystemMove()
         }
 
-        // --- 右下角拉伸手柄 (扁平化设计) ---
+        // --- 右下角拉伸手柄 ---
         Item {
             id: resizeHandle
             width: 20; height: 20
             anchors.right: parent.right
             anchors.bottom: parent.bottom
+            anchors.rightMargin: 4
+            anchors.bottomMargin: 4
             z: 10
 
             Canvas {
@@ -184,10 +228,10 @@ Window {
                 onPaint: {
                     var ctx = getContext("2d");
                     ctx.reset();
-                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.15);
-                    ctx.lineWidth = 1;
-                    ctx.moveTo(20, 10); ctx.lineTo(10, 20);
-                    ctx.moveTo(20, 15); ctx.lineTo(15, 20);
+                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.12);
+                    ctx.lineWidth = 1.5;
+                    ctx.moveTo(20, 8); ctx.lineTo(8, 20);
+                    ctx.moveTo(20, 14); ctx.lineTo(14, 20);
                     ctx.stroke();
                 }
             }
@@ -201,8 +245,8 @@ Window {
                     if (pressed) {
                         let dx = mouse.x - lastPos.x;
                         let dy = mouse.y - lastPos.y;
-                        if (tagWindow.width + dx > 180) tagWindow.width += dx;
-                        if (tagWindow.height + dy > 120) tagWindow.height += dy;
+                        if (tagWindow.width + dx > 200) tagWindow.width += dx;
+                        if (tagWindow.height + dy > 200) tagWindow.height += dy;
                     }
                 }
             }
