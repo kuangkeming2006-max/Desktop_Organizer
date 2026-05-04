@@ -110,15 +110,17 @@ Window {
                         }
 
                         Button {
-                            Layout.preferredWidth: 30; Layout.preferredHeight: 30
+                            id: menuBtn
+                            Layout.preferredWidth: 34; Layout.preferredHeight: 34
                             Layout.alignment: Qt.AlignVCenter
                             background: Rectangle {
-                                radius: 15
-                                color: parent.containsMouse ? Qt.rgba(1,1,1,0.12) : "transparent"
+                                radius: 17
+                                color: menuBtn.hovered ? Qt.rgba(1,1,1,0.18) : "transparent"
+                                Behavior on color { ColorAnimation { duration: 150 } }
                             }
                             contentItem: Text {
                                 text: "\u22EF"
-                                font.pixelSize: 22
+                                font.pixelSize: 20
                                 color: "#F5F5F7"
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
@@ -216,7 +218,6 @@ Window {
             anchors.rightMargin: cardPadding
             height: capsuleHeight
             z: 10
-            cursorShape: Qt.OpenHandCursor
             onPressed: tagWindow.startSystemMove()
         }
 
@@ -245,7 +246,6 @@ Window {
 
             MouseArea {
                 anchors.fill: parent
-                cursorShape: Qt.SizeFDiagCursor
                 property point lastPos
                 onPressed: (mouse) => lastPos = Qt.point(mouse.x, mouse.y)
                 onPositionChanged: (mouse) => {
