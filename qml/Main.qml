@@ -312,7 +312,7 @@ ApplicationWindow {
 
                 MouseArea {
                     anchors.fill: parent
-                    onPositionChanged: (mouse) => {
+                    onPositionChanged: {
                         if (pressedButtons & Qt.LeftButton) root.startSystemMove()
                     }
                 }

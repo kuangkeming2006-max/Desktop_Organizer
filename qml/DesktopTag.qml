@@ -40,6 +40,10 @@ Window {
             // 【修改】：传入 true，明确自己是贴纸
             appBackend.initNativeWindow(tagWindow, true);
         }
+        // +++ 向底层注册自己的句柄，建立原生拖拽通道 +++
+        if (appBackend.registerTagWindowId) {
+            appBackend.registerTagWindowId(tagWindow, tagWindow.tagId);
+        }
     }
 
     // 位置/尺寸變化後延遲保存（去抖 800ms）
@@ -278,29 +282,22 @@ Window {
                             }
                         }
 
-                        DropArea {
-                            anchors.fill: parent
+                        // +++ 监听底层传来的原生拖拽事件 +++
+                        Connections {
+                            target: appBackend
+                            function onFilesDroppedNative(droppedTagId, fileUrls) {
+                                if (tagWindow.tagId === droppedTagId) {
+                                    console.log("🚀 [底层原生接管] 成功捕获拖入文件！数量:", fileUrls.length);
 
-                            // 【修复 1】：接收系统提议的真实拖拽动作（CopyAction / MoveAction）
-                            // 不再硬编码 LinkAction，避免 Windows OLE 源拒绝交互
-                            onEntered: (drag) => {
-                                if (drag.hasUrls) {
-                                    drag.acceptProposedAction();
-                                }
-                            }
+                                    for (var i = 0; i < fileUrls.length; i++) {
+                                        var urlStr = fileUrls[i];
+                                        console.log("准备移动文件:", urlStr);
 
-                            onDropped: (drop) => {
-                                if (drop.hasUrls) {
-                                    // 【修复 2】：明确接受 drop，防止事件被向上层抛出
-                                    drop.acceptProposedAction();
-
-                                    for (var i = 0; i < drop.urls.length; i++) {
-                                        var urlStr = drop.urls[i].toString();
                                         if (appBackend.moveFileToTag(urlStr, tagWindow.savePath)) {
                                             var fName = urlStr.substring(urlStr.lastIndexOf("/") + 1);
                                             fileModel.append({ "fileName": fName });
                                         } else {
-                                            console.error("文件移动失败，请检查 C++ 后端输出: ", urlStr);
+                                            console.error("❌ 文件移动失败: ", urlStr);
                                         }
                                     }
                                 }
@@ -346,7 +343,7 @@ Window {
                 anchors.fill: parent
                 cursorShape: Qt.SizeFDiagCursor
 
-                onPressed: (mouse) => {
+                onPressed: {
                     tagWindow.raise();                  // 準備縮放時主動提權
 
                     // 【新增】核心修复：直接调用系统的右下角缩放机制！

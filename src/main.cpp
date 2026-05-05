@@ -26,8 +26,15 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dwmapi.h>
+#include <shellapi.h>
+#include <ole2.h>
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
+
+// 前向宣告（自由函數，繞過 WinEventFilter ↔ AppBackend 循環依賴）
+class AppBackend;
+extern AppBackend* g_appBackend;
+void forwardNativeDrop(HWND hwnd, const QStringList& filePaths);
 
 // 原生視窗事件過濾器：
 // - 使用 QSet<HWND> 白名單管理受影響的視窗
@@ -57,6 +64,24 @@ public:
             }
 
             switch (msg->message) {
+            // +++ 拦截基础拖拽消息 +++
+            case WM_DROPFILES: {
+                HDROP hDrop = (HDROP)msg->wParam;
+                UINT count = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
+                QStringList filePaths;
+                for (UINT i = 0; i < count; ++i) {
+                    TCHAR filePath[MAX_PATH];
+                    if (DragQueryFileW(hDrop, i, filePath, MAX_PATH)) {
+                        filePaths.append(QString::fromWCharArray(filePath));
+                    }
+                }
+                DragFinish(hDrop);
+
+                // 将文件路径传给 Backend（透過自由函數，繞過循環依賴）
+                forwardNativeDrop(msg->hwnd, filePaths);
+                if (result) *result = 0;
+                return true; // 告诉系统我们处理完毕
+            }
             // 【新增】：拦截背景擦除，防止拉伸时出现纯色方角闪烁
             case WM_ERASEBKGND: {
                 if (result) *result = 1; // 返回 1 表示“应用程序已处理背景擦除”
@@ -170,6 +195,10 @@ private:
     QSystemTrayIcon *m_trayIcon = nullptr;
     QPointer<QQuickWindow> m_mainWindow;
 
+    // +++ 1. 添加单例支持和窗口映射表 +++
+    static AppBackend* s_instance;
+    QMap<HWND, QString> m_hwndToTagId;
+
     bool isTrayAvailable() const { return m_trayIcon != nullptr; }
 
     // 获取配置文件的绝对路径 (C:\Users\用户名\AppData\Roaming\SYSU_DesktopOrganizer\config.json)
@@ -205,6 +234,37 @@ private:
     }
 
 public:
+    static AppBackend* instance() { return s_instance; }
+
+    // +++ 2. 新增一个信号，用于通知 QML 文件已就绪 +++
+signals:
+    void filesDroppedNative(const QString &tagId, const QStringList &fileUrls);
+
+public:
+    // +++ 3. 新增供 QML 调用的注册函数 +++
+    Q_INVOKABLE void registerTagWindowId(QQuickWindow* window, const QString& tagId) {
+        if (!window) return;
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+        m_hwndToTagId[hwnd] = tagId;
+
+        // 【核心黑科技】：强行注销 Qt 默认的 OLE 高级拖拽，
+        // 迫使 Windows 降级使用基础的 WM_DROPFILES，从而绕过桌面图标层的拦截！
+        RevokeDragDrop(hwnd);
+    }
+
+    // +++ 4. 新增底层处理器 +++
+    void handleNativeDrop(HWND hwnd, const QStringList& paths) {
+        if (m_hwndToTagId.contains(hwnd)) {
+            QString tagId = m_hwndToTagId[hwnd];
+            QStringList urls;
+            for (const QString& path : paths) {
+                // 转为 file:/// 格式以兼容你现有的移动逻辑
+                urls.append("file:///" + QString(path).replace("\\", "/"));
+            }
+            emit filesDroppedNative(tagId, urls);
+        }
+    }
+
     // ==================== 终极桌面注入 ====================
     Q_INVOKABLE void stickToDesktop(QQuickWindow* window) {
         if (!window) return;
@@ -336,6 +396,8 @@ public:
         qDebug() << "Global root path updated to:" << path;
     }
     explicit AppBackend(QObject *parent = nullptr) : QObject(parent) {
+        s_instance = this; // 绑定单例
+        g_appBackend = this; // 也绑定 extern 全局指標
         loadConfig(); // 启动时加载配置
     }
 
@@ -359,45 +421,65 @@ public:
 
     // 4. 将文件移入贴纸，并在 Ledger 中记账！
     Q_INVOKABLE bool moveFileToTag(const QString &fileUrl, const QString &destFolder) {
+        qDebug() << "🟢 [后端探测] --- moveFileToTag 被调用 ---";
+        qDebug() << "🟢 [后端探测] 接收到的原始 URL:" << fileUrl;
+        qDebug() << "🟢 [后端探测] 目标文件夹路径:" << destFolder;
+
         QUrl url(fileUrl);
-        if (!url.isLocalFile()) return false;
+        if (!url.isLocalFile()) {
+            qDebug() << "❌ [后端报错] 传入的 URL 不是本地文件！";
+            return false;
+        }
 
         QString sourcePath = url.toLocalFile();
         QFileInfo fileInfo(sourcePath);
+        qDebug() << "🟢 [后端探测] 解析出的源文件绝对路径:" << sourcePath;
+        qDebug() << "🟢 [后端探测] 源文件是否存在?" << fileInfo.exists();
+
+        if (!fileInfo.exists()) {
+            qDebug() << "❌ [后端报错] 找不到源文件，操作终止。";
+            return false;
+        }
 
         QDir dir(destFolder);
-        if (!dir.exists()) dir.mkpath(".");
+        if (!dir.exists()) {
+            qDebug() << "🟢 [后端探测] 目标文件夹不存在，尝试创建...";
+            bool mkDirSuccess = dir.mkpath(".");
+            qDebug() << "🟢 [后端探测] 文件夹创建结果:" << mkDirSuccess;
+        }
 
         QString destPath = dir.absoluteFilePath(fileInfo.fileName());
+        qDebug() << "🟢 [后端探测] 准备移动到的目标路径:" << destPath;
 
-        // ============================================================
-        // 【核心修复】：跨盘符移动逻辑
-        // QFile::rename 底层调用系统重命名 API，无法跨物理磁盘分区（如 C: -> D:）
-        // 先尝试 rename，失败时降级为 复制+删除
-        // ============================================================
+        // 尝试重命名 (同一盘符)
         bool moveSuccess = QFile::rename(sourcePath, destPath);
+        qDebug() << "🟢 [后端探测] QFile::rename 执行结果:" << moveSuccess;
 
         if (!moveSuccess) {
-            // rename 失败（极大概率是因为跨盘符 C: -> D:）
-            // 降级为：先复制文件，再删除原文件
+            qDebug() << "🟡 [后端警告] rename 失败，可能是跨盘符操作，尝试降级为 Copy + Remove...";
             if (QFile::copy(sourcePath, destPath)) {
-                QFile::remove(sourcePath);
-                moveSuccess = true;
+                qDebug() << "🟢 [后端探测] Copy 成功，正在尝试 Remove 源文件...";
+                if (QFile::remove(sourcePath)) {
+                    qDebug() << "🟢 [后端探测] Remove 成功！跨盘符移动完成。";
+                    moveSuccess = true;
+                } else {
+                    qDebug() << "❌ [后端报错] Copy 成功但 Remove 源文件失败！(可能被占用或权限不足)";
+                }
             } else {
-                qDebug() << "File move completely failed:" << sourcePath;
+                qDebug() << "❌ [后端报错] QFile::copy 彻底失败！";
             }
         }
 
         if (moveSuccess) {
-            // 【核心记账逻辑】：记录 目标物理路径 -> 原始桌面路径
             QJsonObject ledger = m_config["fileLedger"].toObject();
             ledger[destPath] = sourcePath;
             m_config["fileLedger"] = ledger;
             saveConfig();
-
-            qDebug() << "File moved & logged:" << destPath;
+            qDebug() << "🟢 [后端探测] 操作完成，账本已更新保存。";
             return true;
         }
+
+        qDebug() << "❌ [后端报错] 文件移动最终宣告失败。";
         return false;
     }
 
@@ -567,6 +649,17 @@ public:
             m_trayIcon->showMessage(title, msg, QSystemTrayIcon::Information, 3000);
     }
 };
+
+// +++ 5. 在类外初始化静态成员 +++
+AppBackend* AppBackend::s_instance = nullptr;
+AppBackend* g_appBackend = nullptr;
+
+// 转发函数定义（放在 AppBackend 之后，此时 g_appBackend 指向完整类型）
+void forwardNativeDrop(HWND hwnd, const QStringList& filePaths) {
+    if (g_appBackend) {
+        g_appBackend->handleNativeDrop(hwnd, filePaths);
+    }
+}
 
 // ======================================================================
 // 主函数
