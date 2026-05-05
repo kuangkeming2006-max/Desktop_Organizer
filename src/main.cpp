@@ -486,7 +486,7 @@ public:
         m_trayIcon = new QSystemTrayIcon(this);
 
         // 使用應用程式圖示，若無則建立一個簡單的色塊圖示
-        QIcon appIcon = QIcon(":/sticker.ico");
+        QIcon appIcon = QIcon(":/assets/app_icon.ico");
         if (appIcon.isNull()) {
             QPixmap pm(32, 32);
             pm.fill(Qt::darkGray);
