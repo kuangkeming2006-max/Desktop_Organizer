@@ -529,21 +529,82 @@ ApplicationWindow {
                                         }
                                     }
 
-                                    Text { text: "主题颜色"; color: mdTextPrimary; font.pixelSize: 14; font.weight: Font.Medium }
-                                    TextField {
-                                        id: inputColor
-                                        Layout.fillWidth: true; text: isDarkMode ? "#ffffff" : "#000000"; placeholderText: "颜色代码"; font.pixelSize: 14; color: mdTextPrimary
-                                        verticalAlignment: TextInput.AlignVCenter; leftPadding: 16; rightPadding: 16
-                                        background: Rectangle { implicitHeight: 44; radius: 8; color: mdInputBg; border.color: parent.activeFocus ? currentThemeColor : mdCardBorder; border.width: parent.activeFocus ? 2 : 1 }
+                                    // ================= 1. 优化的主题颜色选择 =================
+                                    Text { 
+                                        text: "主题颜色"; color: mdTextPrimary; font.pixelSize: 14; font.weight: Font.Medium
+                                        Layout.alignment: Qt.AlignTop | Qt.AlignLeft; Layout.topMargin: 14 
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 12
+                                        
+                                        TextField {
+                                            id: inputColor
+                                            Layout.fillWidth: true; text: isDarkMode ? "#ffffff" : "#000000"; placeholderText: "颜色代码"; font.pixelSize: 14; color: mdTextPrimary
+                                            verticalAlignment: TextInput.AlignVCenter; leftPadding: 16; rightPadding: 16
+                                            background: Rectangle { implicitHeight: 44; radius: 8; color: mdInputBg; border.color: parent.activeFocus ? currentThemeColor : mdCardBorder; border.width: parent.activeFocus ? 2 : 1 }
+                                        }
+
+                                        // 新增：快捷颜色块预设
+                                        Row {
+                                            spacing: 14
+                                            Repeater {
+                                                model: ["#0b57d0", "#188038", "#d93025", "#9333ea", "#e37400", "#e91e63"]
+                                                delegate: Rectangle {
+                                                    width: 28; height: 28; radius: 14
+                                                    color: modelData
+                                                    border.color: inputColor.text.toLowerCase() === modelData.toLowerCase() ? mdTextPrimary : Qt.rgba(0,0,0,0.1)
+                                                    border.width: inputColor.text.toLowerCase() === modelData.toLowerCase() ? 2 : 1
+                                                    
+                                                    scale: colorMouse.containsMouse ? 1.15 : 1.0
+                                                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+
+                                                    MouseArea {
+                                                        id: colorMouse
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        onClicked: inputColor.text = modelData
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
 
+                                    // ================= 2. 优化的映射地址 =================
                                     Text { text: "映射地址"; color: mdTextPrimary; font.pixelSize: 14; font.weight: Font.Medium }
-                                    TextField {
-                                        id: inputPath
-                                        Layout.fillWidth: true; readOnly: true; color: mdTextSecondary; font.pixelSize: 14
-                                        text: root.globalRootPath + "/" + (inputName.text.trim() === "" ? "新贴纸" : inputName.text.trim())
-                                        verticalAlignment: TextInput.AlignVCenter; leftPadding: 16; rightPadding: 16
-                                        background: Rectangle { implicitHeight: 44; radius: 8; color: isDarkMode ? Qt.rgba(0,0,0,0.3) : Qt.rgba(0,0,0,0.02); border.color: mdCardBorder; border.width: 1 }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+                                        
+                                        TextField {
+                                            id: inputPath
+                                            Layout.fillWidth: true; readOnly: true; color: mdTextSecondary; font.pixelSize: 14
+                                            text: root.globalRootPath + "/" + (inputName.text.trim() === "" ? "新贴纸" : inputName.text.trim())
+                                            verticalAlignment: TextInput.AlignVCenter; leftPadding: 16; rightPadding: 16
+                                            background: Rectangle { implicitHeight: 44; radius: 8; color: isDarkMode ? Qt.rgba(0,0,0,0.3) : Qt.rgba(0,0,0,0.02); border.color: mdCardBorder; border.width: 1 }
+                                        }
+
+                                        // 新增：跳转到设置的按钮
+                                        Rectangle {
+                                            width: 80; height: 44; radius: 8
+                                            color: jumpMouse.containsMouse ? mdHover : mdInputBg
+                                            border.color: mdCardBorder; border.width: 1
+                                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                                            Text { 
+                                                text: "⚙ 修改根目录"; 
+                                                font.pixelSize: 12; 
+                                                font.weight: Font.Medium; 
+                                                anchors.centerIn: parent; 
+                                                color: mdTextPrimary 
+                                            }
+
+                                            MouseArea {
+                                                id: jumpMouse; anchors.fill: parent; hoverEnabled: true
+                                                onClicked: {
+                                                    root.activeIndex = 2; 
+                                                }
+                                            }
+                                        }
                                     }
 
                                     Text { text: "限制后缀"; color: mdTextPrimary; font.pixelSize: 14; font.weight: Font.Medium }
