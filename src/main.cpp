@@ -370,7 +370,25 @@ public:
 
         QString destPath = dir.absoluteFilePath(fileInfo.fileName());
 
-        if (QFile::rename(sourcePath, destPath)) {
+        // ============================================================
+        // 【核心修复】：跨盘符移动逻辑
+        // QFile::rename 底层调用系统重命名 API，无法跨物理磁盘分区（如 C: -> D:）
+        // 先尝试 rename，失败时降级为 复制+删除
+        // ============================================================
+        bool moveSuccess = QFile::rename(sourcePath, destPath);
+
+        if (!moveSuccess) {
+            // rename 失败（极大概率是因为跨盘符 C: -> D:）
+            // 降级为：先复制文件，再删除原文件
+            if (QFile::copy(sourcePath, destPath)) {
+                QFile::remove(sourcePath);
+                moveSuccess = true;
+            } else {
+                qDebug() << "File move completely failed:" << sourcePath;
+            }
+        }
+
+        if (moveSuccess) {
             // 【核心记账逻辑】：记录 目标物理路径 -> 原始桌面路径
             QJsonObject ledger = m_config["fileLedger"].toObject();
             ledger[destPath] = sourcePath;

@@ -280,19 +280,29 @@ Window {
 
                         DropArea {
                             anchors.fill: parent
+
+                            // 【修复 1】：接收系统提议的真实拖拽动作（CopyAction / MoveAction）
+                            // 不再硬编码 LinkAction，避免 Windows OLE 源拒绝交互
                             onEntered: (drag) => {
-                                drag.accept(Qt.LinkAction);
+                                if (drag.hasUrls) {
+                                    drag.acceptProposedAction();
+                                }
                             }
+
                             onDropped: (drop) => {
                                 if (drop.hasUrls) {
+                                    // 【修复 2】：明确接受 drop，防止事件被向上层抛出
+                                    drop.acceptProposedAction();
+
                                     for (var i = 0; i < drop.urls.length; i++) {
                                         var urlStr = drop.urls[i].toString();
                                         if (appBackend.moveFileToTag(urlStr, tagWindow.savePath)) {
                                             var fName = urlStr.substring(urlStr.lastIndexOf("/") + 1);
                                             fileModel.append({ "fileName": fName });
+                                        } else {
+                                            console.error("文件移动失败，请检查 C++ 后端输出: ", urlStr);
                                         }
                                     }
-                                    drop.accept();
                                 }
                             }
                         }
