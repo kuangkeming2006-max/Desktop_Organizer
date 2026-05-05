@@ -618,15 +618,83 @@ ApplicationWindow {
                         Item {
                             anchors.fill: parent
 
-                            Text {
-                                id: manageTitle
+                            // === 顶部标题与一键呼出按钮区 ===
+                            Item {
+                                id: topBarArea
                                 x: 48; y: 48
-                                text: "管理活动贴纸"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary
+                                width: parent.width - 96
+                                height: 40
+
+                                Text {
+                                    id: manageTitle
+                                    anchors.left: parent.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "管理活动贴纸"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary
+                                }
+
+                                // === 新增：一键呼出全部按钮 ===
+                                Rectangle {
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 140; height: 38; radius: 19
+                                    color: showAllBtnMouse.pressed ? Qt.darker(currentThemeColor, 1.2) : currentThemeColor
+                                    opacity: showAllBtnMouse.containsMouse ? 0.85 : 1.0
+                                    Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                                    Row {
+                                        anchors.centerIn: parent; spacing: 8
+                                        Text { text: ""; font.pixelSize: 16; color: currentThemeColorInv }
+                                        Text { text: "一键呼出全部"; color: currentThemeColorInv; font.pixelSize: 14; font.weight: Font.Medium }
+                                    }
+
+                                    MouseArea {
+                                        id: showAllBtnMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            var screenW = Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : 1920;
+                                            var screenH = Screen.desktopAvailableHeight > 0 ? Screen.desktopAvailableHeight : 1080;
+                                            if (screenW > 3000) screenW = screenW / 2; // 规避多屏导致的超大分辨率
+
+                                            // 遍历所有存活的贴纸窗口
+                                            for (var key in root.activeTagWindows) {
+                                                var win = root.activeTagWindows[key];
+                                                if (win) {
+                                                    // 1. 强制取消最小化、显示、提权置顶
+                                                    win.showNormal();
+                                                    win.visible = true;
+                                                    win.raise();
+                                                    win.requestActivate();
+
+                                                    // 2. 越界抢救：如果贴纸飞出屏幕了，强行拽回来
+                                                    var needsRescue = false;
+                                                    var tX = win.x;
+                                                    var tY = win.y;
+
+                                                    if (tX + win.width > screenW) { tX = screenW - win.width - 20; needsRescue = true; }
+                                                    if (tX < 0) { tX = 20; needsRescue = true; }
+                                                    if (tY + win.height > screenH) { tY = screenH - win.height - 20; needsRescue = true; }
+                                                    if (tY < 0) { tY = 20; needsRescue = true; }
+
+                                                    if (needsRescue) {
+                                                        win.x = tX;
+                                                        win.y = tY;
+                                                        if (appBackend.updateTagGeometry) {
+                                                            appBackend.updateTagGeometry(key, tX, tY, win.width, win.height);
+                                                        }
+                                                        console.log("🛠️ 已执行越界救援，贴纸:", key, "新坐标:", tX, tY);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
+                            // === 贴纸网格列表 ===
                             GridView {
                                 id: manageGrid
-                                anchors.top: manageTitle.bottom; anchors.topMargin: 24
+                                anchors.top: topBarArea.bottom; anchors.topMargin: 24
                                 anchors.left: parent.left; anchors.leftMargin: 48
                                 anchors.right: parent.right; anchors.rightMargin: 48
                                 anchors.bottom: manageHint.top; anchors.bottomMargin: 12
@@ -653,6 +721,7 @@ ApplicationWindow {
                                         Text { text: "当前收纳: " + model.fileCount + " 个文件"; color: mdTextSecondary; font.pixelSize: 13 }
                                     }
 
+                                    // 删除按钮
                                     Rectangle {
                                         anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12
                                         width: 28; height: 28; radius: 14; color: isDarkMode ? "#331111" : "#fce8e6"
@@ -683,7 +752,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            // 使用提示 — 贴在底部内部
+                            // === 使用提示 ===
                             Rectangle {
                                 id: manageHint
                                 anchors.left: parent.left; anchors.leftMargin: 48
