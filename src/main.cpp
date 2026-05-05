@@ -485,8 +485,15 @@ public:
 
         m_trayIcon = new QSystemTrayIcon(this);
 
-        // 使用應用程式圖示，若無則建立一個簡單的色塊圖示
-        QIcon appIcon = QIcon(":/assets/app_icon.ico");
+        // 【修改】：Qt中统一使用免插件原生支持的 png 格式加载，彻底避免找不到 qico.dll 插件的bug
+        QIcon appIcon = QIcon(":/assets/app_icon.png");
+        
+        // 若获取失败，优先回退到应用主窗口的默认图标（常由系统从 exe 中提供）
+        if (appIcon.isNull()) {
+            appIcon = QCoreApplication::instance() ? qApp->windowIcon() : QIcon();
+        }
+        
+        // 保底措施（如果最终还是拿不到，才用色块）
         if (appIcon.isNull()) {
             QPixmap pm(32, 32);
             pm.fill(Qt::darkGray);
@@ -571,12 +578,12 @@ int main(int argc, char *argv[])
 #endif
 
     QApplication app(argc, argv);
-    app.setWindowIcon(QIcon(":/assets/app_icon.ico"));
     // 设置应用元数据 (在注册表和任务管理器中显示)
     app.setOrganizationName("SYSU CyberSec");
     app.setOrganizationDomain("sysu.edu.cn");
     app.setApplicationName("Desktop Organizer");
-    app.setWindowIcon(QIcon(":/sticker.ico"));
+    // 【修改】：Qt中统一使用免插件原生支持的 png 格式
+    app.setWindowIcon(QIcon(":/assets/app_icon.png"));
 
     QQmlApplicationEngine engine;
 

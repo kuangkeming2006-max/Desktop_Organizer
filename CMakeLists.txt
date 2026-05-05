@@ -5,6 +5,9 @@ project(Desktop_Tool VERSION 0.1 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOMOC ON)
+
 # 1. 查找 Qt 库
 find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Svg)
 
