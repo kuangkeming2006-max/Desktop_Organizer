@@ -20,6 +20,11 @@ Window {
 
     width: tagWidth
     height: tagHeight
+
+    // 【新增】告诉系统原生缩放时的最小界限
+    minimumWidth: 200
+    minimumHeight: 200
+
     x: startX
     y: startY
     visible: true
@@ -329,18 +334,12 @@ Window {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.SizeFDiagCursor
-                property point lastPos
+
                 onPressed: (mouse) => {
                     tagWindow.raise();                  // 準備縮放時主動提權
-                    lastPos = Qt.point(mouse.x, mouse.y);
-                }
-                onPositionChanged: (mouse) => {
-                    if (pressed) {
-                        let dx = mouse.x - lastPos.x;
-                        let dy = mouse.y - lastPos.y;
-                        if (tagWindow.width + dx > 200) tagWindow.width += dx;
-                        if (tagWindow.height + dy > 200) tagWindow.height += dy;
-                    }
+
+                    // 【新增】核心修复：直接调用系统的右下角缩放机制！
+                    tagWindow.startSystemResize(Qt.RightEdge | Qt.BottomEdge);
                 }
             }
         }
