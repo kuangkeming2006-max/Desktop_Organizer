@@ -549,6 +549,38 @@ public:
         qDebug() << "Tag" << tagId << "removed and files restored.";
     }
 
+    // --- 新增：复原单个文件到原本的位置 ---
+    Q_INVOKABLE bool restoreSingleFile(const QString &tagFolder, const QString &fileName) {
+        QDir dir(tagFolder);
+        QString currentPath = dir.absoluteFilePath(fileName);
+        QJsonObject ledger = m_config["fileLedger"].toObject();
+
+        if (ledger.contains(currentPath)) {
+            QString originalPath = ledger[currentPath].toString();
+
+            bool moveSuccess = QFile::rename(currentPath, originalPath);
+            if (!moveSuccess) {
+                if (QFile::copy(currentPath, originalPath)) {
+                    QFile::remove(currentPath);
+                    moveSuccess = true;
+                }
+            }
+
+            if (moveSuccess) {
+                ledger.remove(currentPath);
+                m_config["fileLedger"] = ledger;
+                saveConfig();
+                
+                qDebug() << "🟢 单个文件已精准复原:" << originalPath;
+                return true;
+            }
+        } else {
+            qDebug() << "❌ 账本中找不到该文件的原始路径记录 (可能是手动复制入文件夹的):" << currentPath;
+        }
+        
+        return false;
+    }
+
     // 6. 更新贴纸位置和尺寸（每次拖拽/調整後保存）
     Q_INVOKABLE void updateTagGeometry(const QString &tagId, int x, int y, int w, int h) {
         QJsonArray tags = m_config["tags"].toArray();

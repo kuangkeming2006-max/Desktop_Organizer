@@ -368,14 +368,35 @@ Window {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 
-                                // 单击选中（展开文字）
+                                // 同时接收左键和右键
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                
+                                // 单击：只有左键单击才展开文字
                                 onClicked: {
-                                    fileGrid.currentIndex = index;
+                                    if (mouse.button === Qt.LeftButton) {
+                                        fileGrid.currentIndex = index;
+                                    }
                                 }
                                 
-                                // 双击打开文件
                                 onDoubleClicked: {
-                                    Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName)
+                                    // 左键双击：打开文件
+                                    if (mouse.button === Qt.LeftButton) {
+                                        Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName);
+                                    } 
+                                    // 右键双击：精准复原
+                                    else if (mouse.button === Qt.RightButton) {
+                                        var fName = model.fileName;
+                                        if (appBackend.restoreSingleFile(tagWindow.savePath, fName)) {
+                                            fileModel.remove(index);
+                                            if (appBackend.showTrayMessage) {
+                                                appBackend.showTrayMessage("精准复原", fName + " 已飞回桌面！");
+                                            }
+                                        } else {
+                                            if (appBackend.showTrayMessage) {
+                                                appBackend.showTrayMessage("复原失败", "找不到文件的原地址，可能它是手动移入的。");
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
