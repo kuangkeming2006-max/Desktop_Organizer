@@ -34,15 +34,23 @@ Window {
     // flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
 
-    // 觸發 DWM 重新計算非客戶區，且使用初始位置
+    // 觸發 DWM 重新計算非客戶區，且使用初始位置，并在启动时恢复已有文件
     Component.onCompleted: {
         if (appBackend.initNativeWindow) {
-            // 【修改】：传入 true，明确自己是贴纸
             appBackend.initNativeWindow(tagWindow, true);
         }
-        // +++ 向底层注册自己的句柄，建立原生拖拽通道 +++
+        
         if (appBackend.registerTagWindowId) {
             appBackend.registerTagWindowId(tagWindow, tagWindow.tagId);
+        }
+
+        // +++ 新增：启动时自动去物理文件夹里把文件读出来，塞进格子里 +++
+        if (appBackend.getFilesInFolder) {
+            var existingFiles = appBackend.getFilesInFolder(tagWindow.savePath);
+            for (var i = 0; i < existingFiles.length; i++) {
+                fileModel.append({ "fileName": existingFiles[i] });
+            }
+            console.log("📂 贴纸 [" + tagWindow.tagTitle + "] 已从文件夹恢复文件数量:", existingFiles.length);
         }
     }
 
@@ -248,65 +256,141 @@ Window {
                     GridView {
                         id: fileGrid
                         anchors.fill: parent
-                        // 给网格边缘留一点呼吸空间
                         anchors.margins: 4 
                         
-                        // 1. 固定且紧凑的单元格尺寸
+                        // 为了容纳 3 行文字，稍微增加一点格子高度
                         cellWidth: 76
-                        cellHeight: 88
+                        cellHeight: 104 
                         model: fileModel
                         clip: true
+                        
+                        // 默认不选中任何项
+                        currentIndex: -1
+
+                        // 点击空白区域取消选中
+                        MouseArea {
+                            anchors.fill: parent
+                            z: -1
+                            onClicked: fileGrid.currentIndex = -1
+                        }
 
                         delegate: Item {
+                            id: delegateItem
                             width: fileGrid.cellWidth; height: fileGrid.cellHeight
                             
-                            // 2. 增加现代 UI 的悬停反馈背景
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 4
-                                radius: 8
-                                color: itemMouse.containsMouse ? Qt.rgba(0, 0, 0, 0.05) : "transparent"
-                                Behavior on color { ColorAnimation { duration: 150 } }
+                            // 核心状态：当前项是否被选中
+                            property bool isSelected: GridView.isCurrentItem
+
+                            // 智能匹配文件图标和颜色的函数
+                            function getFileInfo(name) {
+                                var ext = name.split('.').pop().toLowerCase();
+                                if (name.indexOf('.') === -1) ext = "folder"; // 无后缀
+
+                                var info = { icon: "📄", colorCode: "#808080" }; // 默认
+                                
+                                if (["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"].includes(ext)) { info.icon = "🖼️"; info.colorCode = "#0B8043"; }
+                                else if (["pdf"].includes(ext)) { info.icon = "📕"; info.colorCode = "#DB4437"; }
+                                else if (["doc", "docx"].includes(ext)) { info.icon = "📘"; info.colorCode = "#4285F4"; }
+                                else if (["xls", "xlsx", "csv"].includes(ext)) { info.icon = "📗"; info.colorCode = "#0F9D58"; }
+                                else if (["ppt", "pptx"].includes(ext)) { info.icon = "📙"; info.colorCode = "#F4B400"; }
+                                else if (["txt", "md", "rtf"].includes(ext)) { info.icon = "📝"; info.colorCode = "#5F6368"; }
+                                else if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) { info.icon = "📦"; info.colorCode = "#8D6E63"; }
+                                else if (["mp4", "mkv", "avi", "mov"].includes(ext)) { info.icon = "🎬"; info.colorCode = "#E91E63"; }
+                                else if (["mp3", "wav", "flac"].includes(ext)) { info.icon = "🎵"; info.colorCode = "#9C27B0"; }
+                                else if (["exe", "msi", "bat", "lnk"].includes(ext)) { info.icon = "⚙️"; info.colorCode = "#607D8B"; }
+                                else if (["cpp", "h", "qml", "js", "json", "py"].includes(ext)) { info.icon = "💻"; info.colorCode = "#3F51B5"; }
+                                else if (ext === "folder") { info.icon = "📁"; info.colorCode = "#F4B400"; }
+                                
+                                return info;
                             }
 
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 4 // 缩小图标和文字的间距
+                            property var fileInfo: getFileInfo(model.fileName)
+                            property color tColor: fileInfo.colorCode
 
-                                Rectangle {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    width: 40; height: 40; radius: 10 // 图标稍微精简一点
-                                    color: Qt.rgba(tagColor.r, tagColor.g, tagColor.b, 0.1)
-                                    Text {
-                                        text: "\uD83D\uDCC4"
-                                        anchors.centerIn: parent
-                                        font.pixelSize: 20
-                                    }
-                                }
+                            // 整个项的层级：选中时必须置顶，防止展开的长文字被下方的图标遮住
+                            z: isSelected ? 100 : 1
+
+                            // == 1. 图标区域（改为顶部绝对对齐，彻底解决高低不平问题）==
+                            Rectangle {
+                                id: iconRect
+                                anchors.top: parent.top
+                                anchors.topMargin: 8
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 44; height: 44; radius: 10
+                                
+                                // 根据选中/悬浮状态和文件类型动态变换颜色
+                                color: isSelected ? Qt.rgba(tColor.r, tColor.g, tColor.b, 0.3) :
+                                       (itemMouse.containsMouse ? Qt.rgba(tColor.r, tColor.g, tColor.b, 0.2) : 
+                                       Qt.rgba(tColor.r, tColor.g, tColor.b, 0.1))
+                                
+                                border.color: isSelected ? tColor : (itemMouse.containsMouse ? Qt.rgba(tColor.r, tColor.g, tColor.b, 0.3) : "transparent")
+                                border.width: isSelected || itemMouse.containsMouse ? 1 : 0
+                                Behavior on color { ColorAnimation { duration: 150 } }
 
                                 Text {
-                                    text: model.fileName
-                                    font.pixelSize: 11
-                                    color: "#1D1D1F"
-                                    // 让文字占用整个格子的宽度
-                                    width: fileGrid.cellWidth - 8 
-                                    
-                                    // 3. 核心修改：允许最多两行折行显示
-                                    wrapMode: Text.WrapAnywhere
-                                    maximumLineCount: 2
-                                    elide: Text.ElideRight
-                                    
-                                    horizontalAlignment: Text.AlignHCenter
-                                    lineHeight: 1.1 // 紧凑的行高
-                                    font.weight: Font.Medium
+                                    text: delegateItem.fileInfo.icon
+                                    anchors.centerIn: parent
+                                    font.pixelSize: 22
                                 }
                             }
-                            
+
+                            // == 2. 文字区域（带弹出效果）==
+                            Rectangle {
+                                id: textBg
+                                anchors.top: iconRect.bottom
+                                anchors.topMargin: 4
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                
+                                width: fileGrid.cellWidth - 4
+                                // 核心：高度跟随文字的实际高度自动拉伸
+                                height: fileNameText.implicitHeight + 8
+                                radius: 6
+                                
+                                // 选中时变成实心白底，防止展开后文字和背景融为一体看不清
+                                color: isSelected ? "#ffffff" : "transparent"
+                                border.color: isSelected ? Qt.rgba(0,0,0,0.1) : "transparent"
+                                
+                                // 选中时加一点发光阴影效果
+                                layer.enabled: isSelected
+                                layer.effect: MultiEffect { shadowEnabled: true; shadowBlur: 8.0; shadowColor: Qt.rgba(0,0,0,0.15) }
+
+                                Text {
+                                    id: fileNameText
+                                    anchors.centerIn: parent
+                                    width: parent.width - 4
+                                    text: model.fileName
+                                    font.pixelSize: 11
+                                    color: isSelected ? "#000000" : "#1D1D1F"
+                                    
+                                    // 开启折行
+                                    wrapMode: Text.WrapAnywhere
+                                    // 未选中时最多3行，选中时可无限拓展（比如 99 行）
+                                    maximumLineCount: isSelected ? 99 : 3
+                                    // 选中时取消省略号
+                                    elide: isSelected ? Text.ElideNone : Text.ElideRight
+                                    
+                                    horizontalAlignment: Text.AlignHCenter
+                                    lineHeight: 1.1
+                                    // 选中时字体加粗，更清晰
+                                    font.weight: isSelected ? Font.DemiBold : Font.Medium
+                                }
+                            }
+
+                            // == 3. 鼠标交互 ==
                             MouseArea {
                                 id: itemMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                onDoubleClicked: Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName)
+                                
+                                // 单击选中（展开文字）
+                                onClicked: {
+                                    fileGrid.currentIndex = index;
+                                }
+                                
+                                // 双击打开文件
+                                onDoubleClicked: {
+                                    Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName)
+                                }
                             }
                         }
 

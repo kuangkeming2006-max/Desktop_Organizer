@@ -554,6 +554,20 @@ public:
         saveConfig();
     }
 
+    // 8. 恢复显示：读取指定目录下的所有文件和文件夹
+    Q_INVOKABLE QStringList getFilesInFolder(const QString &folderPath) {
+        QStringList fileNames;
+        QDir dir(folderPath);
+        if (dir.exists()) {
+            // 读取文件和文件夹，排除 '.' 和 '..' （当前目录和上级目录的隐藏标记）
+            QFileInfoList fileList = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QFileInfo &info : fileList) {
+                fileNames.append(info.fileName());
+            }
+        }
+        return fileNames;
+    }
+
     // ==================== 系統托盤 ====================
 
     // 初始化系統托盤（由 QML 在 Component.onCompleted 中呼叫）

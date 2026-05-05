@@ -209,12 +209,18 @@ ApplicationWindow {
             createTagComponent(function(comp) {
                 for (var i = 0; i < savedTags.length; i++) {
                     var tagData = savedTags[i];
+                    // 在添加模型之前，先数一数文件夹里到底有几个文件
+                    var actualFileCount = 0;
+                    if (appBackend.getFilesInFolder) {
+                        actualFileCount = appBackend.getFilesInFolder(tagData.savePath).length;
+                    }
+
                     activeTagsModel.append({
                         "tagId": tagData.id,
                         "title": tagData.tagTitle,
                         "path": tagData.savePath,
                         "tagColor": tagData.tagColor,
-                        "fileCount": 0
+                        "fileCount": actualFileCount
                     });
 
                     var qmlProps = Object.assign({}, tagData);
@@ -593,7 +599,11 @@ ApplicationWindow {
                                                     appBackend.stickToDesktop(tag);
 
                                                     appBackend.saveNewTag(jsonProps);
-                                                    activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": 0 });
+                                                    var newTagFileCount = 0;
+                                                    if (appBackend.getFilesInFolder) {
+                                                        newTagFileCount = appBackend.getFilesInFolder(jsonProps.savePath).length;
+                                                    }
+                                                    activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": newTagFileCount });
                                                     tag.tagClosed.connect(createTagCloser());
                                                 }
                                                 console.log("🚀 新贴纸已生成！真实坐标 X:", tag.x, " Y:", tag.y, " 尺寸 W:", tag.width, " H:", tag.height, " 可见性:", tag.visible);
