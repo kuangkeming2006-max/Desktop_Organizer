@@ -101,8 +101,42 @@ Window {
             anchors.fill: parent
             radius: outerRadius
             
-            // 【新增 2】：动态玻璃拟态材质 (Glassmorphism)
-            // 鼠标在上方时为原色，离开时变为带透明度的磨砂玻璃色
+            // 【新增 1】：贴纸出现时的淡入与微弹动画
+            scale: 0.85
+            opacity: 0.0
+            Component.onCompleted: showAnim.start()
+            
+            ParallelAnimation {
+                id: showAnim
+                NumberAnimation { target: cardBody; property: "opacity"; to: 1.0; duration: 250; easing.type: Easing.OutQuad }
+                NumberAnimation { target: cardBody; property: "scale"; to: 1.0; duration: 400; easing.type: Easing.OutBack }
+            }
+
+            // 【新增 2】：松手校验时的呼吸高光层
+            Rectangle {
+                id: feedbackGlow
+                anchors.fill: parent
+                radius: parent.radius
+                color: "transparent"
+                border.width: 3
+                border.color: "transparent"
+                opacity: 0.0
+                z: 999
+
+                SequentialAnimation {
+                    id: pulseSuccess
+                    PropertyAction { target: feedbackGlow; property: "border.color"; value: "#34C759" }
+                    NumberAnimation { target: feedbackGlow; property: "opacity"; from: 0.8; to: 0.0; duration: 800; easing.type: Easing.OutCubic }
+                }
+
+                SequentialAnimation {
+                    id: pulseReject
+                    PropertyAction { target: feedbackGlow; property: "border.color"; value: "#FF3B30" }
+                    NumberAnimation { target: feedbackGlow; property: "opacity"; from: 1.0; to: 0.0; duration: 800; easing.type: Easing.OutCubic }
+                }
+            }
+
+            // 动态玻璃拟态材质
             color: tagHover.hovered ? "#F5F5F7" : Qt.rgba(245/255, 245/255, 247/255, 0.35)
             Behavior on color { ColorAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
@@ -407,56 +441,58 @@ Window {
                             function onFilesDroppedNative(droppedTagId, fileUrls) {
                                 if (tagWindow.tagId === droppedTagId) {
                                     
-                                    // === 1. 解析贴纸允许的后缀列表 ===
                                     var extString = tagWindow.allowedExts.trim();
                                     var allowedList = [];
                                     if (extString !== "" && extString !== "*" && extString !== "*.*") {
                                         var parts = extString.split(",");
                                         for (var j = 0; j < parts.length; j++) {
                                             var cleanExt = parts[j].trim().replace("*.", "").toLowerCase();
-                                            if (cleanExt !== "") {
-                                                allowedList.push(cleanExt);
-                                            }
+                                            if (cleanExt !== "") allowedList.push(cleanExt);
                                         }
                                     }
 
-                                    // === 2. 遍历处理拖入的文件 ===
+                                    // 用来记录这次拖拽最终的结果，以决定放什么颜色的光
+                                    var anyRejected = false;
+                                    var anyAccepted = false;
+
                                     for (var i = 0; i < fileUrls.length; i++) {
                                         var urlStr = fileUrls[i];
                                         var fName = decodeURIComponent(urlStr.substring(urlStr.lastIndexOf("/") + 1));
                                         
-                                        // === 3. 核心：后缀名安检 ===
                                         var isAllowed = true;
                                         if (allowedList.length > 0) {
                                             if (fName.indexOf('.') === -1) {
                                                 isAllowed = false; 
                                             } else {
                                                 var fileExt = fName.split('.').pop().toLowerCase();
-                                                if (allowedList.indexOf(fileExt) === -1) {
-                                                    isAllowed = false;
-                                                }
+                                                if (allowedList.indexOf(fileExt) === -1) isAllowed = false;
                                             }
                                         }
 
                                         if (!isAllowed) {
-                                            console.warn("🚫 [拦截] 文件后缀不符，拒绝收纳:", fName);
+                                            console.warn("🚫 [拦截] 文件后缀不符:", fName);
+                                            anyRejected = true;
                                             if (appBackend.showTrayMessage) {
-                                                appBackend.showTrayMessage("格式被拒", "文件 " + fName + " 不符合该贴纸的收纳规则 (" + tagWindow.allowedExts + ")");
+                                                appBackend.showTrayMessage("格式被拒", "文件 " + fName + " 不符合该贴纸的收纳规则");
                                             }
-                                            continue;
+                                            continue; 
                                         }
 
-                                        // === 4. 安检通过，放行！ ===
-                                        console.log("准备移动文件:", urlStr);
                                         if (appBackend.moveFileToTag(urlStr, tagWindow.savePath)) {
+                                            anyAccepted = true;
                                             var exists = false;
                                             for (var k = 0; k < fileModel.count; k++) {
                                                 if (fileModel.get(k).fileName === fName) { exists = true; break; }
                                             }
                                             if (!exists) fileModel.append({ "fileName": fName });
-                                        } else {
-                                            console.error("❌ 文件移动失败: ", urlStr);
                                         }
+                                    }
+
+                                    // === 根据结果触发光效 ===
+                                    if (anyRejected) {
+                                        pulseReject.start();
+                                    } else if (anyAccepted) {
+                                        pulseSuccess.start();
                                     }
                                 }
                             }
