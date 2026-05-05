@@ -38,7 +38,7 @@ ApplicationWindow {
         interval: 50
         onTriggered: {
             if (appBackend.initNativeWindow) {
-                appBackend.initNativeWindow(root);
+                appBackend.initNativeWindow(root, false);
             }
         }
     }
@@ -195,7 +195,7 @@ ApplicationWindow {
 
         // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         if (appBackend.initNativeWindow) {
-            appBackend.initNativeWindow(root);
+            appBackend.initNativeWindow(root, false);
         }
 
         globalRootPath = appBackend.getRootPath();

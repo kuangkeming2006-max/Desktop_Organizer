@@ -37,7 +37,8 @@ Window {
     // 觸發 DWM 重新計算非客戶區，且使用初始位置
     Component.onCompleted: {
         if (appBackend.initNativeWindow) {
-            appBackend.initNativeWindow(tagWindow);
+            // 【修改】：传入 true，明确自己是贴纸
+            appBackend.initNativeWindow(tagWindow, true);
         }
     }
 

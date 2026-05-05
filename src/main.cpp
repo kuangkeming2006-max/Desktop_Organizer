@@ -251,8 +251,8 @@ public:
         }
     }
 
-    // 確保原生視窗樣式完整，觸發 DWM 重新讀取
-    Q_INVOKABLE void initNativeWindow(QQuickWindow* window) {
+    // 【修改】：新增 bool isTagWindow = false 参数
+    Q_INVOKABLE void initNativeWindow(QQuickWindow* window, bool isTagWindow = false) {
         if (!window) return;
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
 
@@ -269,12 +269,19 @@ public:
         if (WinEventFilter::instance())
             WinEventFilter::instance()->addWindow(hwnd);
 
-        // ==========================================
-        // 【关键修复】：补回被 Qt.FramelessWindowHint 强制剥夺的原生窗口样式
-        // 加上这些样式，Windows DWM 才会接管动画和窗口状态管理
-        // ==========================================
         LONG_PTR style = GetWindowLongPtr(hwnd, GWL_STYLE);
-        style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+
+        // ==========================================
+        // 【核心修复】：样式隔离
+        // ==========================================
+        if (!isTagWindow) {
+            // 主窗口：保留原生 DWM 特性（吸附、阴影等）
+            style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
+        } else {
+            // 贴纸窗口：作为桌面纯子窗口，绝对不能有 CAPTION 和 THICKFRAME
+            // 强行剔除这些样式，防止缩放时暴露出原生蓝框
+            style &= ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU);
+        }
         SetWindowLongPtr(hwnd, GWL_STYLE, style);
 
         // 【新增 1】：明确告诉 QQuickWindow 你的物理底层必须是透明的
