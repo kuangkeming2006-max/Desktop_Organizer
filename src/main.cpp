@@ -57,10 +57,53 @@ public:
             }
 
             switch (msg->message) {
+            // 【新增】：拦截背景擦除，防止拉伸时出现纯色方角闪烁
+            case WM_ERASEBKGND: {
+                if (result) *result = 1; // 返回 1 表示“应用程序已处理背景擦除”
+                return true;             // 阻断系统默认的填色行为
+            }
+
+            // 【新增】：手动接管鼠标的边缘命中测试，完美恢复边缘拖拽缩放功能
+            case WM_NCHITTEST: {
+                // 获取鼠标当前的屏幕坐标
+                POINT pt;
+                pt.x = (int)(short)LOWORD(msg->lParam);
+                pt.y = (int)(short)HIWORD(msg->lParam);
+
+                // 获取当前窗口的屏幕坐标
+                RECT rc;
+                GetWindowRect(msg->hwnd, &rc);
+
+                // 转换为相对于窗口的局部坐标
+                int x = pt.x - rc.left;
+                int y = pt.y - rc.top;
+
+                // 定义触发缩放的边缘宽度
+                int bw = 8;
+
+                bool left = x < bw;
+                bool right = x >= (rc.right - rc.left) - bw;
+                bool top = y < bw;
+                bool bottom = y >= (rc.bottom - rc.top) - bw;
+
+                // 告诉 Windows 鼠标当前悬停在哪个边缘
+                if (top && left) { if (result) *result = HTTOPLEFT; return true; }
+                if (top && right) { if (result) *result = HTTOPRIGHT; return true; }
+                if (bottom && left) { if (result) *result = HTBOTTOMLEFT; return true; }
+                if (bottom && right) { if (result) *result = HTBOTTOMRIGHT; return true; }
+                if (left) { if (result) *result = HTLEFT; return true; }
+                if (right) { if (result) *result = HTRIGHT; return true; }
+                if (top) { if (result) *result = HTTOP; return true; }
+                if (bottom) { if (result) *result = HTBOTTOM; return true; }
+
+                // 如果不在边缘，放行让 Qt 自己处理
+                return false;
+            }
+
             case WM_NCCALCSIZE: {
                 if (msg->wParam == TRUE) {
-                    NCCALCSIZE_PARAMS *ncp = reinterpret_cast<NCCALCSIZE_PARAMS *>(msg->lParam);
-                    ncp->rgrc[0] = ncp->rgrc[1];
+                    // 【终极修复】：绝对不要写 ncp->rgrc[0] = ncp->rgrc[1]; ！！
+                    // 直接返回 0，告诉 Windows 我们的透明客户区要覆盖 100% 的窗口面积
                     if (result) *result = 0;
                     return true;
                 }
@@ -214,6 +257,14 @@ public:
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
 
 #ifdef Q_OS_WIN
+        // 补充宏定义，防止旧版 MinGW/MSVC SDK 找不到这些常量
+        #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+        #define DWMWA_WINDOW_CORNER_PREFERENCE 33
+        #endif
+        #ifndef DWMWCP_DONOTROUND
+        #define DWMWCP_DONOTROUND 1
+        #endif
+
         // 將 HWND 註冊到原生事件過濾器（用於 WM_SHOWWINDOW 刷新）
         if (WinEventFilter::instance())
             WinEventFilter::instance()->addWindow(hwnd);
@@ -226,9 +277,27 @@ public:
         style |= WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU;
         SetWindowLongPtr(hwnd, GWL_STYLE, style);
 
+        // 【新增 1】：明确告诉 QQuickWindow 你的物理底层必须是透明的
+        window->setColor(Qt::transparent);
+
+        // 【新增 2】：禁用 Windows 11 原生 DWM 圆角，防止和 QML 里的 radius 打架
+        int cornerPreference = 1; // DWMWCP_DONOTROUND
+        DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
+
         // 啟用持久場景圖與圖形資源：最小化/隱藏後不會釋放渲染緩衝，避免還原後變透明
         window->setPersistentSceneGraph(true);
         window->setPersistentGraphics(true);
+
+        // 【新增】：解除 UIPI 消息攔截，允許外部進程（如 Explorer）將文件拖入
+        // WM_DROPFILES = 0x0233
+        // WM_COPYDATA = 0x004A
+        // 0x0049 是 WM_COPYGLOBALDATA，拖拽文件必備
+        ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, NULL);
+        ChangeWindowMessageFilterEx(hwnd, WM_COPYDATA, MSGFLT_ALLOW, NULL);
+        ChangeWindowMessageFilterEx(hwnd, 0x0049, MSGFLT_ALLOW, NULL);
+
+        // 確保窗口支持接受文件拖放（原生層級）
+        DragAcceptFiles(hwnd, TRUE);
 #endif
 
         // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）

@@ -772,17 +772,68 @@ ApplicationWindow {
                         // ----------------- Page 3: 关于 -----------------
                         Item {
                             ColumnLayout {
-                                anchors.centerIn: parent; spacing: 12
+                                anchors.centerIn: parent; spacing: 20 // 增加间距
 
+                                // 1. 应用大图标
                                 Rectangle {
-                                    Layout.alignment: Qt.AlignHCenter; width: 72; height: 72; radius: 24
+                                    Layout.alignment: Qt.AlignHCenter; width: 80; height: 80; radius: 24
                                     color: mdInputBg
                                     border.color: mdCardBorder; border.width: 1
-                                    Text { text: "❖"; font.pixelSize: 36; color: mdTextPrimary; anchors.centerIn: parent }
+                                    Text { text: "❖"; font.pixelSize: 40; color: mdTextPrimary; anchors.centerIn: parent }
                                 }
 
-                                Text { text: "迭戈🤮"; color: mdTextPrimary; font.pixelSize: 22; font.weight: Font.Bold; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 10 }
-                                Text { text: ""; color: mdTextSecondary; font.pixelSize: 15; font.weight: Font.Medium; Layout.alignment: Qt.AlignHCenter }
+                                // 2. 项目标题与版本
+                                ColumnLayout {
+                                    spacing: 4; Layout.alignment: Qt.AlignHCenter
+                                    Text { text: "Desktop Organizer"; color: mdTextPrimary; font.pixelSize: 24; font.weight: Font.Bold; Layout.alignment: Qt.AlignHCenter }
+                                    Text { text: "Version 1.0.0"; color: mdTextSecondary; font.pixelSize: 14; Layout.alignment: Qt.AlignHCenter }
+                                }
+
+                                // 3. GitHub 链接按钮 (新增)
+                                Rectangle {
+                                    id: githubBtn
+                                    Layout.alignment: Qt.AlignHCenter; width: 160; height: 44; radius: 22
+                                    color: gitMouse.containsMouse ? (isDarkMode ? "#333" : "#f5f5f5") : "transparent"
+                                    border.color: mdCardBorder; border.width: 1
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                                    Row {
+                                        anchors.centerIn: parent; spacing: 10
+                                        // GitHub SVG 图标 (内嵌路径，不依赖外部字体)
+                                        Item {
+                                            width: 20; height: 20
+                                            Canvas {
+                                                anchors.fill: parent
+                                                onPaint: {
+                                                    var ctx = getContext("2d");
+                                                    ctx.fillStyle = mdTextPrimary;
+                                                    // GitHub Mark 简约 SVG 路径
+                                                    ctx.beginPath();
+                                                    ctx.arc(10, 10, 9, 0, Math.PI * 2, true);
+                                                    ctx.fill();
+                                                    ctx.fillStyle = mdInputBg;
+                                                    ctx.beginPath();
+                                                    ctx.arc(10, 10, 6, 0, Math.PI * 2, true);
+                                                    ctx.fill();
+                                                }
+                                            }
+                                        }
+                                        Text {
+                                            text: "View on GitHub"; font.pixelSize: 14; font.weight: Font.Medium; color: mdTextPrimary
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: gitMouse; anchors.fill: parent; hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            // 替换为你的 GitHub 仓库地址
+                                            Qt.openUrlExternally("https://github.com/kuangkeming2006-max/Desktop_Organizer")
+                                        }
+                                    }
+                                }
+
+                                Text { text: "迭戈"; color: mdTextSecondary; font.pixelSize: 12; Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 20 }
                             }
                         }
                     }

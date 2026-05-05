@@ -61,10 +61,10 @@ Window {
     readonly property int capsuleRadius: outerRadius - cardPadding   // 同心圆角 22
     readonly property int capsuleHeight: 66
 
-    // --- 主卡片（边距 1px 防抗锯齿切边）---
+    // --- 主卡片（边距 20px：安全容纳阴影 + 防抗锯齿切边）---
     Item {
         anchors.fill: parent
-        anchors.margins: 1
+        anchors.margins: 20
 
         // ---- 卡片本体 + Apple 多层阴影 ----
         Rectangle {
@@ -274,6 +274,9 @@ Window {
 
                         DropArea {
                             anchors.fill: parent
+                            onEntered: (drag) => {
+                                drag.accept(Qt.LinkAction);
+                            }
                             onDropped: (drop) => {
                                 if (drop.hasUrls) {
                                     for (var i = 0; i < drop.urls.length; i++) {
