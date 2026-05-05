@@ -84,26 +84,44 @@ Window {
         anchors.fill: parent
         anchors.margins: 20
 
+        // 【新增 1】：全局悬停雷达，检测鼠标是否离开贴纸
+        HoverHandler {
+            id: tagHover
+            onHoveredChanged: {
+                if (!hovered) {
+                    // 当鼠标离开贴纸，立刻取消文件选中，过长的文件名会自动折叠回 3 行
+                    fileGrid.currentIndex = -1;
+                }
+            }
+        }
+
         // ---- 卡片本体 + Apple 多层阴影 ----
         Rectangle {
             id: cardBody
             anchors.fill: parent
             radius: outerRadius
-            color: "#F5F5F7"
+            
+            // 【新增 2】：动态玻璃拟态材质 (Glassmorphism)
+            // 鼠标在上方时为原色，离开时变为带透明度的磨砂玻璃色
+            color: tagHover.hovered ? "#F5F5F7" : Qt.rgba(245/255, 245/255, 247/255, 0.35)
+            Behavior on color { ColorAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
-            // 墊底的 MouseArea：點擊卡片空白處時置頂
+            // 墊底的 MouseArea：點擊卡片空白處時置頂并折叠文字
             MouseArea {
                 anchors.fill: parent
                 onPressed: tagWindow.raise()
+                // 点击贴纸的空白区域时，也折叠长文件名
+                onClicked: fileGrid.currentIndex = -1 
             }
 
-            // 内白边（Apple 招牌 inset border）
+            // 内白边（Apple 招牌 inset border），移出时减弱边缘，增强透明感
             Rectangle {
                 anchors.fill: parent
                 radius: outerRadius
                 color: "transparent"
-                border.color: Qt.rgba(1, 1, 1, 0.8)
+                border.color: tagHover.hovered ? Qt.rgba(1, 1, 1, 0.8) : Qt.rgba(1, 1, 1, 0.4)
                 border.width: 1
+                Behavior on border.color { ColorAnimation { duration: 300 } }
             }
 
             // ===== 布局 =====
@@ -118,26 +136,20 @@ Window {
                     Layout.fillWidth: true
                     Layout.preferredHeight: capsuleHeight
                     radius: capsuleRadius
-                    color: "#1D1D1F"
+                    
+                    // 【新增 3】：顶部深色胶囊同步变为半透明，保持视觉统一
+                    color: tagHover.hovered ? "#1D1D1F" : Qt.rgba(29/255, 29/255, 31/255, 0.4)
+                    Behavior on color { ColorAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
                     // 拖拽區（放在最底層，不遮擋按鈕）
                     MouseArea {
                         anchors.fill: parent
                         onPressed: {
-                            tagWindow.raise();          // 被抓取時主動提權
+                            tagWindow.raise();
                             tagWindow.startSystemMove();
                         }
                     }
-
-                    // 极淡边框增加立体感
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: capsuleRadius
-                        color: "transparent"
-                        border.color: Qt.rgba(0, 0, 0, 0.12)
-                        border.width: 1
-                    }
-
+                    
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 18
