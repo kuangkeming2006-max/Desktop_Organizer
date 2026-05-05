@@ -248,36 +248,64 @@ Window {
                     GridView {
                         id: fileGrid
                         anchors.fill: parent
-                        cellWidth: width / 3
-                        cellHeight: 90
+                        // 给网格边缘留一点呼吸空间
+                        anchors.margins: 4 
+                        
+                        // 1. 固定且紧凑的单元格尺寸
+                        cellWidth: 76
+                        cellHeight: 88
                         model: fileModel
                         clip: true
 
                         delegate: Item {
-                            width: fileGrid.cellWidth; height: 90
+                            width: fileGrid.cellWidth; height: fileGrid.cellHeight
+                            
+                            // 2. 增加现代 UI 的悬停反馈背景
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                radius: 8
+                                color: itemMouse.containsMouse ? Qt.rgba(0, 0, 0, 0.05) : "transparent"
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+
                             Column {
-                                anchors.centerIn: parent; spacing: 6
+                                anchors.centerIn: parent
+                                spacing: 4 // 缩小图标和文字的间距
+
                                 Rectangle {
-                                    width: 44; height: 44; radius: 10
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 40; height: 40; radius: 10 // 图标稍微精简一点
                                     color: Qt.rgba(tagColor.r, tagColor.g, tagColor.b, 0.1)
                                     Text {
                                         text: "\uD83D\uDCC4"
                                         anchors.centerIn: parent
-                                        font.pixelSize: 22
+                                        font.pixelSize: 20
                                     }
                                 }
+
                                 Text {
                                     text: model.fileName
-                                    font.pixelSize: 12
+                                    font.pixelSize: 11
                                     color: "#1D1D1F"
-                                    width: parent.width - 6
+                                    // 让文字占用整个格子的宽度
+                                    width: fileGrid.cellWidth - 8 
+                                    
+                                    // 3. 核心修改：允许最多两行折行显示
+                                    wrapMode: Text.WrapAnywhere
+                                    maximumLineCount: 2
                                     elide: Text.ElideRight
+                                    
                                     horizontalAlignment: Text.AlignHCenter
+                                    lineHeight: 1.1 // 紧凑的行高
                                     font.weight: Font.Medium
                                 }
                             }
+                            
                             MouseArea {
+                                id: itemMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 onDoubleClicked: Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName)
                             }
                         }
