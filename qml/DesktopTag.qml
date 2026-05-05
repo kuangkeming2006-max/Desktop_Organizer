@@ -281,36 +281,10 @@ Window {
                             // 核心状态：当前项是否被选中
                             property bool isSelected: GridView.isCurrentItem
 
-                            // 智能匹配文件图标和颜色的函数
-                            function getFileInfo(name) {
-                                var ext = name.split('.').pop().toLowerCase();
-                                if (name.indexOf('.') === -1) ext = "folder"; // 无后缀
-
-                                var info = { icon: "📄", colorCode: "#808080" }; // 默认
-                                
-                                if (["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg"].includes(ext)) { info.icon = "🖼️"; info.colorCode = "#0B8043"; }
-                                else if (["pdf"].includes(ext)) { info.icon = "📕"; info.colorCode = "#DB4437"; }
-                                else if (["doc", "docx"].includes(ext)) { info.icon = "📘"; info.colorCode = "#4285F4"; }
-                                else if (["xls", "xlsx", "csv"].includes(ext)) { info.icon = "📗"; info.colorCode = "#0F9D58"; }
-                                else if (["ppt", "pptx"].includes(ext)) { info.icon = "📙"; info.colorCode = "#F4B400"; }
-                                else if (["txt", "md", "rtf"].includes(ext)) { info.icon = "📝"; info.colorCode = "#5F6368"; }
-                                else if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) { info.icon = "📦"; info.colorCode = "#8D6E63"; }
-                                else if (["mp4", "mkv", "avi", "mov"].includes(ext)) { info.icon = "🎬"; info.colorCode = "#E91E63"; }
-                                else if (["mp3", "wav", "flac"].includes(ext)) { info.icon = "🎵"; info.colorCode = "#9C27B0"; }
-                                else if (["exe", "msi", "bat", "lnk"].includes(ext)) { info.icon = "⚙️"; info.colorCode = "#607D8B"; }
-                                else if (["cpp", "h", "qml", "js", "json", "py"].includes(ext)) { info.icon = "💻"; info.colorCode = "#3F51B5"; }
-                                else if (ext === "folder") { info.icon = "📁"; info.colorCode = "#F4B400"; }
-                                
-                                return info;
-                            }
-
-                            property var fileInfo: getFileInfo(model.fileName)
-                            property color tColor: fileInfo.colorCode
-
-                            // 整个项的层级：选中时必须置顶，防止展开的长文字被下方的图标遮住
+                            // 整个项的层级：选中时置顶
                             z: isSelected ? 100 : 1
 
-                            // == 1. 图标区域（改为顶部绝对对齐，彻底解决高低不平问题）==
+                            // == 1. 原生图标区域 ==
                             Rectangle {
                                 id: iconRect
                                 anchors.top: parent.top
@@ -318,19 +292,19 @@ Window {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: 44; height: 44; radius: 10
                                 
-                                // 根据选中/悬浮状态和文件类型动态变换颜色
-                                color: isSelected ? Qt.rgba(tColor.r, tColor.g, tColor.b, 0.3) :
-                                       (itemMouse.containsMouse ? Qt.rgba(tColor.r, tColor.g, tColor.b, 0.2) : 
-                                       Qt.rgba(tColor.r, tColor.g, tColor.b, 0.1))
-                                
-                                border.color: isSelected ? tColor : (itemMouse.containsMouse ? Qt.rgba(tColor.r, tColor.g, tColor.b, 0.3) : "transparent")
-                                border.width: isSelected || itemMouse.containsMouse ? 1 : 0
+                                // 极简透明/微灰悬停效果
+                                color: isSelected ? Qt.rgba(0, 0, 0, 0.08) :
+                                       (itemMouse.containsMouse ? Qt.rgba(0, 0, 0, 0.04) : "transparent")
                                 Behavior on color { ColorAnimation { duration: 150 } }
 
-                                Text {
-                                    text: delegateItem.fileInfo.icon
+                                // 使用 C++ 提供的高清系统图标
+                                Image {
                                     anchors.centerIn: parent
-                                    font.pixelSize: 22
+                                    width: 32
+                                    height: 32
+                                    sourceSize: Qt.size(32, 32)
+                                    source: "image://fileicon/" + tagWindow.savePath + "/" + model.fileName
+                                    fillMode: Image.PreserveAspectFit
                                 }
                             }
 

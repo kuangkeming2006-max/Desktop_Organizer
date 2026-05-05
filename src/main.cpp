@@ -18,6 +18,8 @@
 #include <QQuickWindow>
 #include <QAbstractNativeEventFilter>
 #include <QSystemTrayIcon>
+#include <QQuickImageProvider>
+#include <QFileIconProvider>
 #include <QMenu>
 #include <QAction>
 #include <QPointer>
@@ -185,6 +187,32 @@ private:
 WinEventFilter* WinEventFilter::s_instance = nullptr;
 #endif
 
+// ==================== 获取系统原生文件图标 ====================
+class FileIconProvider : public QQuickImageProvider {
+public:
+    FileIconProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
+
+    QPixmap requestPixmap(const QString &id, QSize *size, const QSize &requestedSize) override {
+        QFileInfo fileInfo(id);
+        QFileIconProvider provider;
+        
+        QIcon icon = provider.icon(fileInfo);
+
+        int width = 32;
+        int height = 32;
+        if (requestedSize.width() > 0) width = requestedSize.width();
+        if (requestedSize.height() > 0) height = requestedSize.height();
+        if (size) *size = QSize(width, height);
+
+        if (icon.isNull()) {
+            QPixmap empty(width, height);
+            empty.fill(Qt::transparent);
+            return empty;
+        }
+
+        return icon.pixmap(width, height);
+    }
+};
 
 
 class AppBackend : public QObject {
@@ -693,6 +721,9 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon(":/assets/app_icon.png"));
 
     QQmlApplicationEngine engine;
+
+    // +++ 注册系统图标提供者 "fileicon" +++
+    engine.addImageProvider(QLatin1String("fileicon"), new FileIconProvider);
 
 #ifdef Q_OS_WIN
     // 安裝原生訊息過濾器：攔截 WM_NCCALCSIZE 消除透明框
