@@ -368,20 +368,59 @@ Window {
                             }
                         }
 
-                        // +++ 监听底层传来的原生拖拽事件 +++
+                        // 监听底层传来的原生拖拽事件
                         Connections {
                             target: appBackend
                             function onFilesDroppedNative(droppedTagId, fileUrls) {
                                 if (tagWindow.tagId === droppedTagId) {
-                                    console.log("🚀 [底层原生接管] 成功捕获拖入文件！数量:", fileUrls.length);
+                                    
+                                    // === 1. 解析贴纸允许的后缀列表 ===
+                                    var extString = tagWindow.allowedExts.trim();
+                                    var allowedList = [];
+                                    if (extString !== "" && extString !== "*" && extString !== "*.*") {
+                                        var parts = extString.split(",");
+                                        for (var j = 0; j < parts.length; j++) {
+                                            var cleanExt = parts[j].trim().replace("*.", "").toLowerCase();
+                                            if (cleanExt !== "") {
+                                                allowedList.push(cleanExt);
+                                            }
+                                        }
+                                    }
 
+                                    // === 2. 遍历处理拖入的文件 ===
                                     for (var i = 0; i < fileUrls.length; i++) {
                                         var urlStr = fileUrls[i];
-                                        console.log("准备移动文件:", urlStr);
+                                        var fName = decodeURIComponent(urlStr.substring(urlStr.lastIndexOf("/") + 1));
+                                        
+                                        // === 3. 核心：后缀名安检 ===
+                                        var isAllowed = true;
+                                        if (allowedList.length > 0) {
+                                            if (fName.indexOf('.') === -1) {
+                                                isAllowed = false; 
+                                            } else {
+                                                var fileExt = fName.split('.').pop().toLowerCase();
+                                                if (allowedList.indexOf(fileExt) === -1) {
+                                                    isAllowed = false;
+                                                }
+                                            }
+                                        }
 
+                                        if (!isAllowed) {
+                                            console.warn("🚫 [拦截] 文件后缀不符，拒绝收纳:", fName);
+                                            if (appBackend.showTrayMessage) {
+                                                appBackend.showTrayMessage("格式被拒", "文件 " + fName + " 不符合该贴纸的收纳规则 (" + tagWindow.allowedExts + ")");
+                                            }
+                                            continue;
+                                        }
+
+                                        // === 4. 安检通过，放行！ ===
+                                        console.log("准备移动文件:", urlStr);
                                         if (appBackend.moveFileToTag(urlStr, tagWindow.savePath)) {
-                                            var fName = urlStr.substring(urlStr.lastIndexOf("/") + 1);
-                                            fileModel.append({ "fileName": fName });
+                                            var exists = false;
+                                            for (var k = 0; k < fileModel.count; k++) {
+                                                if (fileModel.get(k).fileName === fName) { exists = true; break; }
+                                            }
+                                            if (!exists) fileModel.append({ "fileName": fName });
                                         } else {
                                             console.error("❌ 文件移动失败: ", urlStr);
                                         }
