@@ -22,8 +22,8 @@ Window {
     height: tagHeight
 
     // 【新增】告诉系统原生缩放时的最小界限
-    minimumWidth: 200
-    minimumHeight: 200
+    minimumWidth: 220
+    minimumHeight: 220
 
     x: startX
     y: startY

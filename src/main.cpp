@@ -124,6 +124,14 @@ public:
                 mmi->ptMaxSize.y = mi.rcWork.bottom - mi.rcWork.top;
                 mmi->ptMaxPosition.x = mi.rcWork.left - mi.rcMonitor.left;
                 mmi->ptMaxPosition.y = mi.rcWork.top - mi.rcMonitor.top;
+
+                // ==========================================
+                // 【新增】：告诉 Windows 原生拖拽缩放的最小界限
+                // 根据你的 UI 设计，220x220 是个不错的下限，防止卡片被压扁
+                // ==========================================
+                mmi->ptMinTrackSize.x = 220;
+                mmi->ptMinTrackSize.y = 220;
+
                 if (result) *result = 0;
                 return true;
             }
