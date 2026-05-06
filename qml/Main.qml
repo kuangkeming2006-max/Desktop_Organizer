@@ -2,6 +2,7 @@
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: root
@@ -220,7 +221,8 @@ ApplicationWindow {
                         "title": tagData.tagTitle,
                         "path": tagData.savePath,
                         "tagColor": tagData.tagColor,
-                        "fileCount": actualFileCount
+                        "fileCount": actualFileCount,
+                        "allowedExts": tagData.allowedExts || ""
                     });
 
                     var qmlProps = Object.assign({}, tagData);
@@ -670,7 +672,7 @@ ApplicationWindow {
                                                     if (appBackend.getFilesInFolder) {
                                                         newTagFileCount = appBackend.getFilesInFolder(jsonProps.savePath).length;
                                                     }
-                                                    activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": newTagFileCount });
+                                                    activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": newTagFileCount, "allowedExts": jsonProps.allowedExts });
                                                     tag.tagClosed.connect(createTagCloser());
                                                 }
                                                 console.log("🚀 新贴纸已生成！真实坐标 X:", tag.x, " Y:", tag.y, " 尺寸 W:", tag.width, " H:", tag.height, " 可见性:", tag.visible);
@@ -684,6 +686,13 @@ ApplicationWindow {
                         // ----------------- Page 1: 管理贴纸 -----------------
                         Item {
                             anchors.fill: parent
+
+                            // 全局点击任意空白处取消输入框焦点
+                            MouseArea {
+                                anchors.fill: parent
+                                z: -1
+                                onClicked: mainContainer.forceActiveFocus()
+                            }
 
                             // === 顶部标题与一键呼出按钮区 ===
                             Item {
@@ -765,12 +774,12 @@ ApplicationWindow {
                                 anchors.left: parent.left; anchors.leftMargin: 48
                                 anchors.right: parent.right; anchors.rightMargin: 48
                                 anchors.bottom: manageHint.top; anchors.bottomMargin: 12
-                                cellWidth: 260; cellHeight: 140
+                                cellWidth: 280; cellHeight: 180
                                 model: activeTagsModel
                                 clip: true
 
                                 delegate: Rectangle {
-                                    width: 240; height: 120; radius: 12;
+                                    width: 260; height: 160; radius: 12;
                                     color: mdInputBg
                                     border.color: mdCardBorder; border.width: 1
 
@@ -786,6 +795,65 @@ ApplicationWindow {
                                         }
                                         Text { text: "映射: " + model.path; color: mdTextSecondary; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
                                         Text { text: "当前收纳: " + model.fileCount + " 个文件"; color: mdTextSecondary; font.pixelSize: 13 }
+                                        
+                                        // 新增：规则显示和修改
+                                        RowLayout {
+                                            width: parent.width
+                                            spacing: 8
+                                            Text { text: "规则:"; color: mdTextSecondary; font.pixelSize: 13 }
+                                            TextField {
+                                                id: extField
+                                                Layout.fillWidth: true
+                                                text: model.allowedExts === "" ? "无" : model.allowedExts
+                                                font.pixelSize: 12
+                                                color: mdTextPrimary
+                                                background: Rectangle { 
+                                                    implicitHeight: 24; radius: 4; 
+                                                    color: parent.activeFocus ? mdInputBg : "transparent"
+                                                    border.color: parent.activeFocus ? currentThemeColor : isDarkMode ? Qt.rgba(1,1,1,0.1) : Qt.rgba(0,0,0,0.1)
+                                                }
+                                                onEditingFinished: {
+                                                    model.allowedExts = text;
+                                                    if (appBackend.updateTagRules) {
+                                                        appBackend.updateTagRules(model.tagId, text);
+                                                    }
+                                                    // 如果对应的贴纸窗口开着，也同步更新属性
+                                                    if (root.activeTagWindows[model.tagId]) {
+                                                        root.activeTagWindows[model.tagId].allowedExts = text;
+                                                    }
+                                                }
+                                            }
+
+                                            // 确认修改按钮（带圆圈和勾）
+                                            Rectangle {
+                                                id: checkBtn
+                                                Layout.preferredWidth: 20
+                                                Layout.preferredHeight: 20
+                                                radius: 10
+                                                color: extField.activeFocus ? (checkMouse.containsMouse ? currentThemeColor : "transparent") : "transparent"
+                                                border.color: extField.activeFocus ? currentThemeColor : "transparent"
+                                                border.width: 1
+                                                opacity: extField.activeFocus ? 1.0 : 0.0
+                                                Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "✓"
+                                                    font.pixelSize: 12
+                                                    font.weight: Font.Bold
+                                                    color: checkMouse.containsMouse ? currentThemeColorInv : currentThemeColor
+                                                }
+
+                                                MouseArea {
+                                                    id: checkMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    onClicked: {
+                                                        mainContainer.forceActiveFocus() // 取消焦点自动触发上面的 onEditingFinished 保存
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
 
                                     // 删除按钮
@@ -815,6 +883,7 @@ ApplicationWindow {
                                         anchors.fill: parent; hoverEnabled: true; z: -1
                                         onEntered: delMouse.opacity = 1.0
                                         onExited: if(!delMouse.containsMouse) delMouse.opacity = 0.0
+                                        onClicked: mainContainer.forceActiveFocus() // 卡片内空白处点击也取消焦点
                                     }
                                 }
                             }
@@ -870,7 +939,31 @@ ApplicationWindow {
                                                     text: root.globalRootPath
                                                     verticalAlignment: TextInput.AlignVCenter; leftPadding: 16; rightPadding: 16
                                                     background: Rectangle { implicitHeight: 40; radius: 8; color: mdSurfaceBg; border.color: parent.activeFocus ? currentThemeColor : mdCardBorder; border.width: 1 }
-                                                    onEditingFinished: { root.globalRootPath = text; appBackend.setRootPath(text); }
+                                                }
+                                                Rectangle {
+                                                    id: browseBtn
+                                                    implicitWidth: 80; implicitHeight: 40; radius: 8
+                                                    color: "transparent"
+                                                    border.color: mdCardBorder; border.width: 1
+
+                                                    Rectangle {
+                                                        anchors.fill: parent; radius: parent.radius
+                                                        color: mdHover
+                                                        opacity: browseMouse.containsMouse ? 1.0 : 0.0
+                                                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                                    }
+
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "浏览..."; color: mdTextPrimary
+                                                        font.pixelSize: 14; font.weight: Font.Medium
+                                                    }
+                                                    MouseArea {
+                                                        id: browseMouse
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        onClicked: folderDialog.open()
+                                                    }
                                                 }
                                                 Rectangle {
                                                     id: applyBtn
@@ -898,6 +991,25 @@ ApplicationWindow {
                                                         onReleased: applyBtn.pressed = false
                                                         onClicked: { root.globalRootPath = rootDirInput.text; appBackend.setRootPath(rootDirInput.text); }
                                                     }
+                                                }
+                                            }
+
+                                            FolderDialog {
+                                                id: folderDialog
+                                                currentFolder: "file:///" + rootDirInput.text.replace("\\", "/")
+                                                onAccepted: {
+                                                    var chosenPath = selectedFolder.toString();
+                                                    // 去掉 "file:///" 前缀
+                                                    if (chosenPath.startsWith("file:///")) {
+                                                        chosenPath = chosenPath.substring(8);
+                                                    } else if (chosenPath.startsWith("file://")) {
+                                                        chosenPath = chosenPath.substring(7);
+                                                    }
+                                                    // 确保是 Windows 路径格式 (D:/xxx)
+                                                    chosenPath = chosenPath.replace("/", "/");
+                                                    rootDirInput.text = chosenPath;
+                                                    root.globalRootPath = chosenPath;
+                                                    appBackend.setRootPath(chosenPath);
                                                 }
                                             }
                                         }

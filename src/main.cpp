@@ -614,6 +614,22 @@ public:
         saveConfig();
     }
 
+    // 新增：修改贴纸过滤规则
+    Q_INVOKABLE void updateTagRules(const QString &tagId, const QString &allowedExts) {
+        QJsonArray tags = m_config["tags"].toArray();
+        for (int i = 0; i < tags.size(); ++i) {
+            QJsonObject obj = tags[i].toObject();
+            if (obj["id"].toString() == tagId) {
+                obj["allowedExts"] = allowedExts;
+                tags[i] = obj;
+                break;
+            }
+        }
+        m_config["tags"] = tags;
+        saveConfig();
+        qDebug() << "🟢 贴纸规则已更新:" << tagId << allowedExts;
+    }
+
     // 8. 恢复显示：读取指定目录下的所有文件和文件夹
     Q_INVOKABLE QStringList getFilesInFolder(const QString &folderPath) {
         QStringList fileNames;
