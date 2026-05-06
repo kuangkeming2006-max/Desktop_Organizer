@@ -586,15 +586,21 @@ ApplicationWindow {
                                         // 新增：跳转到设置的按钮
                                         Rectangle {
                                             width: 80; height: 44; radius: 8
-                                            color: jumpMouse.containsMouse ? mdHover : mdInputBg
+                                            color: mdInputBg
                                             border.color: mdCardBorder; border.width: 1
-                                            Behavior on color { ColorAnimation { duration: 150 } }
+
+                                            Rectangle {
+                                                anchors.fill: parent; radius: parent.radius
+                                                color: mdHover
+                                                opacity: jumpMouse.containsMouse ? 1.0 : 0.0
+                                                Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                            }
 
                                             Text { 
-                                                text: "⚙ 修改根目录"; 
+                                                text: "修改";
                                                 font.pixelSize: 12; 
                                                 font.weight: Font.Medium; 
-                                                anchors.centerIn: parent; 
+                                                anchors.centerIn: parent; z: 2
                                                 color: mdTextPrimary 
                                             }
 
@@ -705,7 +711,7 @@ ApplicationWindow {
                                     Row {
                                         anchors.centerIn: parent; spacing: 8
                                         Text { text: ""; font.pixelSize: 16; color: currentThemeColorInv }
-                                        Text { text: "一键呼出全部"; color: currentThemeColorInv; font.pixelSize: 14; font.weight: Font.Medium }
+                                        Text { text: "Reveal All"; color: currentThemeColorInv; font.pixelSize: 14; font.weight: Font.Medium }
                                     }
 
                                     MouseArea {
