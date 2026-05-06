@@ -847,7 +847,7 @@ ApplicationWindow {
                                 Text { text: "系统偏好设置"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary }
 
                                 Rectangle {
-                                    Layout.fillWidth: true; Layout.preferredHeight: 120; radius: 12
+                                    Layout.fillWidth: true; Layout.preferredHeight: 160; radius: 12
                                     color: mdInputBg; border.color: mdCardBorder; border.width: 1
                                     RowLayout {
                                         anchors.fill: parent; anchors.margins: 24
@@ -866,11 +866,32 @@ ApplicationWindow {
                                                     background: Rectangle { implicitHeight: 40; radius: 8; color: mdSurfaceBg; border.color: parent.activeFocus ? currentThemeColor : mdCardBorder; border.width: 1 }
                                                     onEditingFinished: { root.globalRootPath = text; appBackend.setRootPath(text); }
                                                 }
-                                                Button {
-                                                    text: "应用"
-                                                    background: Rectangle { implicitWidth: 80; implicitHeight: 40; radius: 8; color: currentThemeColor; opacity: parent.hovered ? 0.85 : 1.0 }
-                                                    contentItem: Text { text: "应用"; color: currentThemeColorInv; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 14; font.weight: Font.Medium }
-                                                    onClicked: { root.globalRootPath = rootDirInput.text; appBackend.setRootPath(rootDirInput.text); }
+                                                Rectangle {
+                                                    id: applyBtn
+                                                    implicitWidth: 80; implicitHeight: 40; radius: 8
+                                                    color: currentThemeColor
+                                                    property bool pressed: false
+                                                    property bool hovered: false
+                                                    Rectangle {
+                                                        anchors.fill: parent; radius: parent.radius
+                                                        color: applyBtn.pressed ? "black" : "white"
+                                                        opacity: applyBtn.pressed ? 0.20 : (applyBtn.hovered ? 0.18 : 0.0)
+                                                        Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                                    }
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "应用"; color: currentThemeColorInv
+                                                        font.pixelSize: 14; font.weight: Font.Medium
+                                                    }
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        onEntered: applyBtn.hovered = true
+                                                        onExited: applyBtn.hovered = false
+                                                        onPressed: applyBtn.pressed = true
+                                                        onReleased: applyBtn.pressed = false
+                                                        onClicked: { root.globalRootPath = rootDirInput.text; appBackend.setRootPath(rootDirInput.text); }
+                                                    }
                                                 }
                                             }
                                         }
@@ -933,13 +954,19 @@ ApplicationWindow {
                                 Rectangle {
                                     id: githubBtn
                                     Layout.alignment: Qt.AlignHCenter; width: 160; height: 44; radius: 22
-                                    color: gitMouse.containsMouse ? (isDarkMode ? "#333" : "#f5f5f5") : "transparent"
+                                    color: "transparent"
                                     border.color: mdCardBorder; border.width: 1
-                                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                                    Rectangle {
+                                        anchors.fill: parent; radius: parent.radius
+                                        color: isDarkMode ? "#333" : "#f5f5f5"
+                                        opacity: gitMouse.containsMouse ? 1.0 : 0.0
+                                        z: 1
+                                        Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                    }
 
                                     Row {
-                                        anchors.centerIn: parent; spacing: 10
-                                        // GitHub SVG 图标 (内嵌路径，不依赖外部字体)
+                                        anchors.centerIn: parent; spacing: 10; z: 2
                                         Item {
                                             width: 20; height: 20
                                             Canvas {
@@ -947,7 +974,6 @@ ApplicationWindow {
                                                 onPaint: {
                                                     var ctx = getContext("2d");
                                                     ctx.fillStyle = mdTextPrimary;
-                                                    // GitHub Mark 简约 SVG 路径
                                                     ctx.beginPath();
                                                     ctx.arc(10, 10, 9, 0, Math.PI * 2, true);
                                                     ctx.fill();
@@ -967,7 +993,6 @@ ApplicationWindow {
                                         id: gitMouse; anchors.fill: parent; hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            // 替换为你的 GitHub 仓库地址
                                             Qt.openUrlExternally("https://github.com/kuangkeming2006-max/Desktop_Organizer")
                                         }
                                     }
