@@ -1052,7 +1052,7 @@ ApplicationWindow {
                                     }
                                 }
 
-                                // --- 危险操作：重置软件 ---
+                                // --- 清理与重置 ---
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 80
@@ -1068,20 +1068,20 @@ ApplicationWindow {
                                             Layout.fillWidth: true
                                             spacing: 6
                                             Text {
-                                                text: "危险操作：重置软件"
+                                                text: "清理与重置"
                                                 font.pixelSize: 16; font.weight: Font.DemiBold
                                                 color: "#d93025"
                                             }
                                             Text {
-                                                text: "这将清空所有贴纸配置、自启设置并退出程序。"
+                                                text: "删除所有贴纸配置与自启设置，然后退出程序。"
                                                 font.pixelSize: 13; color: mdTextSecondary
                                             }
                                         }
 
                                         Button {
-                                            text: "立即清理并还原"
+                                            text: "执行清理"
                                             background: Rectangle {
-                                                implicitWidth: 120; implicitHeight: 40; radius: 8
+                                                implicitWidth: 100; implicitHeight: 40; radius: 8
                                                 color: parent.pressed ? "#a50e0e" : (parent.hovered ? "#c5221f" : "#d93025")
                                             }
                                             contentItem: Text {
@@ -1175,10 +1175,10 @@ ApplicationWindow {
         }
     }
 
-    // === 二次确认重置对话框 ===
+    // === 清理确认对话框 ===
     Dialog {
         id: resetConfirmDialog
-        title: "确认重置"
+        title: "确认清理"
         modal: true
         anchors.centerIn: Overlay.overlay
         width: 350
@@ -1194,7 +1194,7 @@ ApplicationWindow {
             }
             Text {
                 Layout.fillWidth: true
-                text: "● 所有的贴纸坐标与名称将被删除\n● 开机自启功能将被彻底关闭\n● 软件将立即退出，请手动重启"
+                text: "• 所有贴纸坐标与名称将被删除\n• 开机自启设置将被移除\n• 程序将自动退出，请手动重启"
                 color: "#666"
                 font.pixelSize: 14; wrapMode: Text.WordWrap
             }
@@ -1206,7 +1206,7 @@ ApplicationWindow {
                 DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
             }
             Button {
-                text: "确定清理"
+                text: "确认清理"
                 DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
                 onClicked: appBackend.cleanAndResetAll()
             }
