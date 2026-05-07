@@ -267,8 +267,8 @@ public:
 signals:
     void filesDroppedNative(const QString &tagId, const QStringList &fileUrls);
     void asyncFileMoveFinished(const QString &destPath, bool success);
+    void trayPageSwitchRequested(int pageIndex);
 
-public:
     // +++ 3. 新增供 QML 调用的注册函数 +++
     Q_INVOKABLE void registerTagWindowId(QQuickWindow* window, const QString& tagId) {
         if (!window) return;
@@ -753,10 +753,34 @@ public:
 
         // 右鍵選單
         QMenu *menu = new QMenu();
-        QAction *showAction = menu->addAction("顯示主視窗");
+
+        struct PageItem { const char* label; int index; };
+        PageItem pages[] = {
+            {"添加标签", 0},
+            {"管理贴纸", 1},
+            {"设置中心", 2},
+            {"关于项目", 3}
+        };
+
+        for (const auto& p : pages) {
+            QAction *act = menu->addAction(p.label);
+            QObject::connect(act, &QAction::triggered, this, [this, window, idx = p.index]() {
+                // 顯示並還原主窗口
+                if (window) {
+                    if (window->visibility() == QWindow::Minimized)
+                        window->showNormal();
+                    window->setVisible(true);
+                    window->raise();
+                    window->requestActivate();
+                }
+                // 通知 QML 切換頁面
+                emit trayPageSwitchRequested(idx);
+            });
+        }
+
+        menu->addSeparator();
         QAction *quitAction = menu->addAction("退出程式");
 
-        // addAction() 和 setContextMenu() 已處理所有權
         m_trayIcon->setContextMenu(menu);
 
         // 左鍵點擊還原
@@ -773,19 +797,7 @@ public:
             }
         });
 
-        QObject::connect(showAction, &QAction::triggered, this, [window]() {
-            if (window) {
-                if (window->visibility() == QWindow::Minimized) {
-                    window->showNormal();
-                }
-                window->setVisible(true);
-                window->raise();
-                window->requestActivate();
-            }
-        });
-
         QObject::connect(quitAction, &QAction::triggered, this, [this]() {
-            // 完全退出，先隱藏托盤再 quit
             if (m_trayIcon) m_trayIcon->hide();
             QApplication::quit();
         });

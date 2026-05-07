@@ -201,6 +201,11 @@ ApplicationWindow {
             appBackend.initSystemTray(root);
         }
 
+        // 托盤右鍵切換頁面
+        appBackend.trayPageSwitchRequested.connect(function(idx) {
+            root.activeIndex = idx;
+        });
+
         // 觸發 DWM 重新計算非客戶區（WM_NCCALCSIZE 將消除它）
         if (appBackend.initNativeWindow) {
             appBackend.initNativeWindow(root, false);
