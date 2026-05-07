@@ -25,6 +25,8 @@
 #include <QPointer>
 #include <QPixmap>
 #include <QSet>
+#include <QTimer>
+#include <QtConcurrent/QtConcurrentRun>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dwmapi.h>
@@ -37,6 +39,7 @@
 class AppBackend;
 extern AppBackend* g_appBackend;
 void forwardNativeDrop(HWND hwnd, const QStringList& filePaths);
+void forwardUnregisterHwnd(HWND hwnd);
 
 // 原生視窗事件過濾器：
 // - 使用 QSet<HWND> 白名單管理受影響的視窗
@@ -174,6 +177,8 @@ public:
                 // 【亮點功能：自動 GC】：當窗口（比如貼紙）被徹底銷毀時，
                 // Windows 會發送 WM_NCDESTROY。我們在此處將其移出白名單，防止內存洩漏和野指針。
                 m_hwnds.remove(msg->hwnd);
+                // 【新增】：同步清理後端字典，防止野指针閃退（透過自由函數繞過循環依賴）
+                forwardUnregisterHwnd(msg->hwnd);
                 return false;
             }
             }
@@ -190,9 +195,9 @@ WinEventFilter* WinEventFilter::s_instance = nullptr;
 // ==================== 获取系统原生文件图标 ====================
 class FileIconProvider : public QQuickImageProvider {
 public:
-    FileIconProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
+    FileIconProvider() : QQuickImageProvider(QQuickImageProvider::Image) {}
 
-    QPixmap requestPixmap(const QString &id, QSize *size, const QSize &requestedSize) override {
+    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override {
         QFileInfo fileInfo(id);
         QFileIconProvider provider;
         
@@ -205,12 +210,12 @@ public:
         if (size) *size = QSize(width, height);
 
         if (icon.isNull()) {
-            QPixmap empty(width, height);
+            QImage empty(width, height, QImage::Format_ARGB32);
             empty.fill(Qt::transparent);
             return empty;
         }
 
-        return icon.pixmap(width, height);
+        return icon.pixmap(width, height).toImage();
     }
 };
 
@@ -226,6 +231,7 @@ private:
     // +++ 1. 添加单例支持和窗口映射表 +++
     static AppBackend* s_instance;
     QMap<HWND, QString> m_hwndToTagId;
+    QTimer *m_saveTimer;
 
     bool isTrayAvailable() const { return m_trayIcon != nullptr; }
 
@@ -239,12 +245,7 @@ private:
 
     // 将内存中的 JSON 写入硬盘
     void saveConfig() {
-        QFile file(getConfigPath());
-        if (file.open(QIODevice::WriteOnly)) {
-            QJsonDocument doc(m_config);
-            file.write(doc.toJson());
-            file.close();
-        }
+        m_saveTimer->start(); // 防抖：1秒内多次调用僅觸發一次實際寫入
     }
 
     // 从硬盘加载 JSON
@@ -267,6 +268,7 @@ public:
     // +++ 2. 新增一个信号，用于通知 QML 文件已就绪 +++
 signals:
     void filesDroppedNative(const QString &tagId, const QStringList &fileUrls);
+    void asyncFileMoveFinished(const QString &destPath, bool success);
 
 public:
     // +++ 3. 新增供 QML 调用的注册函数 +++
@@ -280,7 +282,12 @@ public:
         RevokeDragDrop(hwnd);
     }
 
-    // +++ 4. 新增底层处理器 +++
+    // +++ 4a. 新增：窗口銷毀時清理字典，防止野指標閃退 +++
+    Q_INVOKABLE void unregisterTagWindowId(HWND hwnd) {
+        m_hwndToTagId.remove(hwnd);
+    }
+
+    // +++ 4b. 新增底层处理器 +++
     void handleNativeDrop(HWND hwnd, const QStringList& paths) {
         if (m_hwndToTagId.contains(hwnd)) {
             QString tagId = m_hwndToTagId[hwnd];
@@ -427,6 +434,19 @@ public:
         s_instance = this; // 绑定单例
         g_appBackend = this; // 也绑定 extern 全局指標
         loadConfig(); // 启动时加载配置
+
+        // JSON 落盤防抖定時器：延遲 1 秒，單次觸發
+        m_saveTimer = new QTimer(this);
+        m_saveTimer->setSingleShot(true);
+        m_saveTimer->setInterval(1000);
+        connect(m_saveTimer, &QTimer::timeout, this, [this]() {
+            QFile file(getConfigPath());
+            if (file.open(QIODevice::WriteOnly)) {
+                QJsonDocument doc(m_config);
+                file.write(doc.toJson());
+                file.close();
+            }
+        });
     }
 
     // ==================== 暴露给 QML 的接口 ====================
@@ -484,18 +504,26 @@ public:
         qDebug() << "🟢 [后端探测] QFile::rename 执行结果:" << moveSuccess;
 
         if (!moveSuccess) {
-            qDebug() << "🟡 [后端警告] rename 失败，可能是跨盘符操作，尝试降级为 Copy + Remove...";
-            if (QFile::copy(sourcePath, destPath)) {
-                qDebug() << "🟢 [后端探测] Copy 成功，正在尝试 Remove 源文件...";
-                if (QFile::remove(sourcePath)) {
-                    qDebug() << "🟢 [后端探测] Remove 成功！跨盘符移动完成。";
-                    moveSuccess = true;
-                } else {
-                    qDebug() << "❌ [后端报错] Copy 成功但 Remove 源文件失败！(可能被占用或权限不足)";
+            qDebug() << "🟡 [后端警告] rename 失败，启动异步跨盘符复制（不阻塞 UI）...";
+            // 在后台线程执行耗时的文件复制操作
+            QtConcurrent::run([this, sourcePath, destPath]() {
+                bool copyOk = QFile::copy(sourcePath, destPath);
+                if (copyOk) {
+                    QFile::remove(sourcePath); // 复制成功后删除源文件
+                    // 回到主线程更新账本
+                    QMetaObject::invokeMethod(this, [this, destPath, sourcePath]() {
+                        QJsonObject ledger = m_config["fileLedger"].toObject();
+                        ledger[destPath] = sourcePath;
+                        m_config["fileLedger"] = ledger;
+                        saveConfig();
+                        qDebug() << "🟢 [异步] 跨盘符复制完成，账本已更新:" << destPath;
+                    }, Qt::QueuedConnection);
                 }
-            } else {
-                qDebug() << "❌ [后端报错] QFile::copy 彻底失败！";
-            }
+                emit asyncFileMoveFinished(destPath, copyOk);
+            });
+            // 乐观返回 true，QML 立即添加文件到列表
+            qDebug() << "🟡 [异步] 跨盘符复制已提交后台线程，UI 不阻塞。";
+            return true;
         }
 
         if (moveSuccess) {
@@ -748,6 +776,12 @@ AppBackend* g_appBackend = nullptr;
 void forwardNativeDrop(HWND hwnd, const QStringList& filePaths) {
     if (g_appBackend) {
         g_appBackend->handleNativeDrop(hwnd, filePaths);
+    }
+}
+
+void forwardUnregisterHwnd(HWND hwnd) {
+    if (g_appBackend) {
+        g_appBackend->unregisterTagWindowId(hwnd);
     }
 }
 

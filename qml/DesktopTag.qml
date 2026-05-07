@@ -66,6 +66,11 @@ Window {
             }
         }
     }
+
+    // 【新增】：窗口銷毀前強制停止所有掛起的定時器，防止訪問已銷毀對象
+    Component.onDestruction: {
+        saveGeoDebounce.stop();
+    }
     onXChanged: saveGeoDebounce.restart()
     onYChanged: saveGeoDebounce.restart()
     onWidthChanged: saveGeoDebounce.restart()
@@ -343,7 +348,7 @@ Window {
                                        (itemMouse.containsMouse ? Qt.rgba(0, 0, 0, 0.04) : "transparent")
                                 Behavior on color { ColorAnimation { duration: 150 } }
 
-                                // 使用 C++ 提供的高清系统图标
+                                // 使用 C++ 提供的高清系统图标（异步加载不阻塞 UI）
                                 Image {
                                     anchors.centerIn: parent
                                     width: 32
@@ -351,6 +356,7 @@ Window {
                                     sourceSize: Qt.size(32, 32)
                                     source: "image://fileicon/" + tagWindow.savePath + "/" + model.fileName
                                     fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
                                 }
                             }
 

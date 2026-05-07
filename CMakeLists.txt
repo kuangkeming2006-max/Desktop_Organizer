@@ -9,7 +9,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOMOC ON)
 
 # 1. 查找 Qt 库
-find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Svg)
+find_package(Qt6 REQUIRED COMPONENTS Quick Widgets Svg Concurrent)
 
 # 2. Qt 标准项目设置
 qt_standard_project_setup(REQUIRES 6.8)
@@ -30,7 +30,7 @@ qt_add_qml_module(appDesktop_Tool
     VERSION 1.0
     QML_FILES
         qml/Main.qml
-        QML_FILES qml/DesktopTag.qml
+        qml/DesktopTag.qml
 )
 
 # 5. 设置目标属性 (Windows/macOS 相关)
@@ -43,7 +43,7 @@ set_target_properties(appDesktop_Tool PROPERTIES
 
 # 6. 链接库
 target_link_libraries(appDesktop_Tool
-    PRIVATE Qt6::Quick Qt6::Widgets Qt6::Svg
+    PRIVATE Qt6::Quick Qt6::Widgets Qt6::Svg Qt6::Concurrent
     dwmapi
 )
 
@@ -54,4 +54,3 @@ install(TARGETS appDesktop_Tool
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
-set(CMAKE_AUTOMOC ON)

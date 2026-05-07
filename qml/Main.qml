@@ -18,9 +18,13 @@ ApplicationWindow {
         appBackend.minimizeToTray(root);
     }
 
+    // 【防重入鎖】：防止 DWM 刷新與 visibility 變化形成無限事件循環
+    property bool isRefreshingDwm: false
+
     // 監聽 Visibility 變化（專門處理任務欄的最小化與還原）
     onVisibilityChanged: {
-        if (visibility !== Window.Minimized && visibility !== Window.Hidden) {
+        if (!isRefreshingDwm && visibility !== Window.Minimized && visibility !== Window.Hidden) {
+            isRefreshingDwm = true;
             if (appBackend.initNativeWindow) {
                 forceDwmRefresh.start();
             }
@@ -29,7 +33,8 @@ ApplicationWindow {
 
     // 保持對 visible 的監聽（處理從系統托盤徹底隱藏後還原的情況）
     onVisibleChanged: {
-        if (visible && appBackend.initNativeWindow) {
+        if (!isRefreshingDwm && visible && appBackend.initNativeWindow) {
+            isRefreshingDwm = true;
             forceDwmRefresh.start();
         }
     }
@@ -41,6 +46,8 @@ ApplicationWindow {
             if (appBackend.initNativeWindow) {
                 appBackend.initNativeWindow(root, false);
             }
+            // 延遲解鎖，防止風暴
+            Qt.callLater(function() { root.isRefreshingDwm = false; })
         }
     }
 
