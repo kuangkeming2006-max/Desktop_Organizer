@@ -929,9 +929,17 @@ ApplicationWindow {
 
                         // ----------------- Page 2: 设置中心 -----------------
                         Item {
-                            ColumnLayout {
-                                anchors.fill: parent; anchors.margins: 48; spacing: 24
-                                Text { text: "系统偏好设置"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary }
+                            ScrollView {
+                                anchors.fill: parent
+                                anchors.margins: 48
+                                clip: true
+                                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                                ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                                ColumnLayout {
+                                    width: parent.width
+                                    spacing: 24
+                                    Text { text: "系统偏好设置"; font.pixelSize: 26; font.weight: Font.DemiBold; color: mdTextPrimary }
 
                                 Rectangle {
                                     Layout.fillWidth: true; Layout.preferredHeight: 160; radius: 12
