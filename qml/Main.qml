@@ -573,7 +573,7 @@ ApplicationWindow {
                                             }
                                         }
 
-                                        // ☁️ Google Drive 模式热区
+                                        // ☁️ Google Drive 模式按钮
                                         MouseArea {
                                             width: parent.width / 2
                                             height: parent.height
@@ -581,21 +581,25 @@ ApplicationWindow {
 
                                             Row {
                                                 anchors.centerIn: parent
-                                                spacing: 8
+                                                spacing: 6
 
-                                                // 使用官方 Google Drive SVG Logo
+                                                // 載入我們剛才寫好的官方 SVG
                                                 Image {
                                                     source: "qrc:/assets/gdrive_logo.svg"
-                                                    width: 18; height: 18
-                                                    sourceSize: Qt.size(36, 36) // 保证抗锯齿清晰度
+                                                    width: 16; height: 16
+                                                    sourceSize: Qt.size(32, 32) // 提升高分屏下的抗鋸齒清晰度
                                                     antialiasing: true
+                                                    opacity: currentStorageMode === "gdrive" ? 1.0 : 0.5
+                                                    Behavior on opacity { NumberAnimation { duration: 200 } }
                                                 }
 
                                                 Text {
                                                     text: "Google Drive"
-                                                    font.pixelSize: 14
+                                                    font.pixelSize: 13
                                                     font.weight: currentStorageMode === "gdrive" ? Font.DemiBold : Font.Medium
-                                                    color: mdTextPrimary
+                                                    color: isDarkMode ? "#FFFFFF" : "#000000"
+                                                    opacity: currentStorageMode === "gdrive" ? 1.0 : 0.5
+                                                    Behavior on opacity { NumberAnimation { duration: 200 } }
                                                 }
                                             }
                                         }
@@ -1351,4 +1355,5 @@ ApplicationWindow {
             }
         }
     }
+}
 }

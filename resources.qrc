@@ -2,5 +2,6 @@
     <qresource prefix="/">
         <file>assets/app_icon.ico</file>
         <file>assets/app_icon.png</file>
+        <file>assets/gdrive_logo.svg</file>
     </qresource>
 </RCC>
