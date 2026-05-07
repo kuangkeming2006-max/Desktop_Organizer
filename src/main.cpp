@@ -269,6 +269,7 @@ signals:
     void asyncFileMoveFinished(const QString &destPath, bool success);
     void trayPageSwitchRequested(int pageIndex);
 
+public:
     // +++ 3. 新增供 QML 调用的注册函数 +++
     Q_INVOKABLE void registerTagWindowId(QQuickWindow* window, const QString& tagId) {
         if (!window) return;
@@ -754,6 +755,20 @@ signals:
         // 右鍵選單
         QMenu *menu = new QMenu();
 
+        // 顯示主視窗（頂部）
+        QAction *showAction = menu->addAction("顯示主視窗");
+        QObject::connect(showAction, &QAction::triggered, this, [window]() {
+            if (window) {
+                if (window->visibility() == QWindow::Minimized)
+                    window->showNormal();
+                window->setVisible(true);
+                window->raise();
+                window->requestActivate();
+            }
+        });
+
+        menu->addSeparator();
+
         struct PageItem { const char* label; int index; };
         PageItem pages[] = {
             {"添加标签", 0},
@@ -765,7 +780,6 @@ signals:
         for (const auto& p : pages) {
             QAction *act = menu->addAction(p.label);
             QObject::connect(act, &QAction::triggered, this, [this, window, idx = p.index]() {
-                // 顯示並還原主窗口
                 if (window) {
                     if (window->visibility() == QWindow::Minimized)
                         window->showNormal();
@@ -773,7 +787,6 @@ signals:
                     window->raise();
                     window->requestActivate();
                 }
-                // 通知 QML 切換頁面
                 emit trayPageSwitchRequested(idx);
             });
         }
@@ -813,13 +826,27 @@ signals:
         window->hide();
         m_trayIcon->show();
 
-        // Windows 氣泡提示：「Desktop Organizer 已最小化到系統托盤」
-        m_trayIcon->showMessage(
-            "Desktop Organizer",
-            "已最小化到系統托盤，雙擊圖示還原。",
-            QSystemTrayIcon::Information,
-            3000
-        );
+        // 檢查使用者是否關閉了提示
+        if (!m_config["settings"].toObject()["suppressMinimizeHint"].toBool()) {
+            m_trayIcon->showMessage(
+                "Desktop Organizer",
+                "已最小化到系統托盤，雙擊圖示還原。",
+                QSystemTrayIcon::Information,
+                3000
+            );
+        }
+    }
+
+    // 是否不再提示最小化氣泡
+    Q_INVOKABLE bool isSuppressMinimizeHint() {
+        return m_config["settings"].toObject()["suppressMinimizeHint"].toBool();
+    }
+
+    Q_INVOKABLE void setSuppressMinimizeHint(bool suppress) {
+        QJsonObject settings = m_config["settings"].toObject();
+        settings["suppressMinimizeHint"] = suppress;
+        m_config["settings"] = settings;
+        saveConfig();
     }
 
     // 從 QML 直接發送托盤提示

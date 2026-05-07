@@ -1057,6 +1057,38 @@ ApplicationWindow {
                                     }
                                 }
 
+                                // --- 最小化提示开关 ---
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 80
+                                    radius: 12
+                                    color: mdInputBg; border.color: mdCardBorder; border.width: 1
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.margins: 24
+                                        Column {
+                                            Layout.fillWidth: true; spacing: 6
+                                            Text { text: "最小化提示"; font.pixelSize: 16; font.weight: Font.DemiBold; color: mdTextPrimary }
+                                            Text { text: "最小化到系统托盘时显示气泡通知"; font.pixelSize: 13; color: mdTextSecondary }
+                                        }
+                                        Switch {
+                                            id: hintSwitch
+                                            Component.onCompleted: checked = !appBackend.isSuppressMinimizeHint()
+                                            indicator: Rectangle {
+                                                implicitWidth: 44; implicitHeight: 24; radius: 12
+                                                color: hintSwitch.checked ? currentThemeColor : (isDarkMode ? Qt.rgba(1,1,1,0.1) : Qt.rgba(0,0,0,0.1))
+                                                border.color: hintSwitch.checked ? currentThemeColor : (isDarkMode ? Qt.rgba(1,1,1,0.2) : Qt.rgba(0,0,0,0.2))
+                                                Behavior on color { ColorAnimation { duration: 200 } }
+                                                Rectangle {
+                                                    x: hintSwitch.checked ? parent.width - width - 2 : 2; y: 2; width: 20; height: 20; radius: 10; color: currentThemeColorInv
+                                                    layer.enabled: true; layer.effect: MultiEffect { shadowEnabled: true; shadowBlur: 2.0; shadowColor: isDarkMode ? Qt.rgba(0,0,0,0.8) : Qt.rgba(0,0,0,0.2) }
+                                                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                                }
+                                            }
+                                            onClicked: appBackend.setSuppressMinimizeHint(!checked)
+                                        }
+                                    }
+                                }
+
                                 // --- 清理与重置 ---
                                 Rectangle {
                                     Layout.fillWidth: true
