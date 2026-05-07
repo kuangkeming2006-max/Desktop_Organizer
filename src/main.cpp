@@ -473,6 +473,36 @@ public:
         return reg.contains(appName);
     }
 
+    // 1c. 全量清理：移除自启注册表、删除 AppData 配置、退出程序
+    Q_INVOKABLE void cleanAndResetAll() {
+        qDebug() << "开始全量清理程序残留...";
+
+        // 1. 清理注册表自启动项
+        QString appName = QCoreApplication::applicationName();
+        QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
+        if (reg.contains(appName)) {
+            reg.remove(appName);
+            qDebug() << "已移除注册表开机自启残留。";
+        }
+
+        // 2. 获取 %appdata% 下的文件夹路径
+        QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir dir(dataDir);
+
+        if (dir.exists()) {
+            // 尝试递归删除整个配置文件夹（包含 config.json 和 账本）
+            if (dir.removeRecursively()) {
+                qDebug() << "已成功删除 AppData 缓存目录:" << dataDir;
+            } else {
+                qDebug() << "删除失败，可能部分文件被占用。";
+            }
+        }
+
+        // 3. 强制退出程序
+        // 重置后必须退出，防止程序继续尝试写入已不存在的路径
+        qApp->quit();
+    }
+
     // 2. 获取所有已保存的贴纸 (用于开机恢复)
     Q_INVOKABLE QVariantList getSavedTags() {
         return m_config["tags"].toArray().toVariantList();
