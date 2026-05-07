@@ -1240,6 +1240,7 @@ ApplicationWindow {
                                 Item { Layout.fillHeight: true }
                             }
                         }
+                        }
 
                         // ----------------- Page 3: 关于 -----------------
                         Item {
@@ -1355,5 +1356,4 @@ ApplicationWindow {
             }
         }
     }
-}
 }
