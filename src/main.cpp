@@ -451,8 +451,28 @@ public:
 
     // ==================== 暴露给 QML 的接口 ====================
 
-    // 1. 开机自启 (保持不变)
-    Q_INVOKABLE void setAutoStart(bool enable) { /* ... 之前的代码 ... */ }
+    // 1. 开机自启：写入/移除 Windows 注册表 Run 键
+    Q_INVOKABLE void setAutoStart(bool enable) {
+        QString appName = QCoreApplication::applicationName();
+        QString appPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+
+        QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
+
+        if (enable) {
+            reg.setValue(appName, "\"" + appPath + "\" --autostart");
+            qDebug() << "开机自启已启用:" << appPath << "--autostart";
+        } else {
+            reg.remove(appName);
+            qDebug() << "开机自启已移除";
+        }
+    }
+
+    // 1b. 读取当前真实的注册表自启状态
+    Q_INVOKABLE bool isAutoStartEnabled() {
+        QString appName = QCoreApplication::applicationName();
+        QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
+        return reg.contains(appName);
+    }
 
     // 2. 获取所有已保存的贴纸 (用于开机恢复)
     Q_INVOKABLE QVariantList getSavedTags() {
@@ -802,7 +822,13 @@ int main(int argc, char *argv[])
     // 【修改】：Qt中统一使用免插件原生支持的 png 格式
     app.setWindowIcon(QIcon(":/assets/app_icon.png"));
 
+    // 判断是否是静默自启（随系统开机启动）
+    bool isSilentBoot = app.arguments().contains("--autostart");
+
     QQmlApplicationEngine engine;
+
+    // 注入自启标识给 QML（控制主窗口是否默认显示）
+    engine.rootContext()->setContextProperty("isSilentBoot", isSilentBoot);
 
     // +++ 注册系统图标提供者 "fileicon" +++
     engine.addImageProvider(QLatin1String("fileicon"), new FileIconProvider);

@@ -8,7 +8,7 @@ ApplicationWindow {
     id: root
     width: 1050
     height: 700
-    visible: true
+    visible: !isSilentBoot
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
 
@@ -1034,7 +1034,8 @@ ApplicationWindow {
                                             Text { text: "登录 Windows 后自动恢复所有桌面贴纸"; font.pixelSize: 13; color: mdTextSecondary }
                                         }
                                         Switch {
-                                            id: bootSwitch; checked: true
+                                            id: bootSwitch
+                                            Component.onCompleted: checked = appBackend.isAutoStartEnabled()
                                             indicator: Rectangle {
                                                 implicitWidth: 44; implicitHeight: 24; radius: 12
                                                 color: bootSwitch.checked ? currentThemeColor : (isDarkMode ? Qt.rgba(1,1,1,0.1) : Qt.rgba(0,0,0,0.1))
@@ -1046,7 +1047,7 @@ ApplicationWindow {
                                                     Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                                                 }
                                             }
-                                            onCheckedChanged: appBackend.setAutoStart(checked)
+                                            onClicked: appBackend.setAutoStart(checked)
                                         }
                                     }
                                 }
