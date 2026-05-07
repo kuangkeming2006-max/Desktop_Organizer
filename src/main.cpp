@@ -87,11 +87,9 @@ public:
                 if (result) *result = 0;
                 return true; // 告诉系统我们处理完毕
             }
-            // 【新增】：拦截背景擦除，防止拉伸时出现纯色方角闪烁
-            case WM_ERASEBKGND: {
-                if (result) *result = 1; // 返回 1 表示“应用程序已处理背景擦除”
-                return true;             // 阻断系统默认的填色行为
-            }
+            // 【2025-05-07 移除】：攔截 WM_ERASEBKGND 在跨屏時會導致黑色殘影
+            // （Qt 6 渲染管線已妥善處理透明背景，無需手動接管擦除）
+            // case WM_ERASEBKGND: { ... }
 
             // 【新增】：手动接管鼠标的边缘命中测试，完美恢复边缘拖拽缩放功能
             case WM_NCHITTEST: {
@@ -395,8 +393,9 @@ public:
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPreference, sizeof(cornerPreference));
 
         // 啟用持久場景圖與圖形資源：最小化/隱藏後不會釋放渲染緩衝，避免還原後變透明
-        window->setPersistentSceneGraph(true);
-        window->setPersistentGraphics(true);
+        // 【2025-05-07 禁用】：跨屏時會導致黑色殘影（不同 GPU/DPI 間渲染緩衝未重建）
+        // window->setPersistentSceneGraph(true);
+        // window->setPersistentGraphics(true);
 
         // 【新增】：解除 UIPI 消息攔截，允許外部進程（如 Explorer）將文件拖入
         // WM_DROPFILES = 0x0233
