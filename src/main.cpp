@@ -27,6 +27,10 @@
 #include <QSet>
 #include <QTimer>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QDesktopServices>
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <dwmapi.h>
@@ -231,6 +235,9 @@ private:
     QMap<HWND, QString> m_hwndToTagId;
     QTimer *m_saveTimer;
 
+    // +++ 网络管理器 +++
+    QNetworkAccessManager *m_netManager;
+
     bool isTrayAvailable() const { return m_trayIcon != nullptr; }
 
     // 获取配置文件的绝对路径 (C:\Users\用户名\AppData\Roaming\SYSU_DesktopOrganizer\config.json)
@@ -268,6 +275,7 @@ signals:
     void filesDroppedNative(const QString &tagId, const QStringList &fileUrls);
     void asyncFileMoveFinished(const QString &destPath, bool success);
     void trayPageSwitchRequested(int pageIndex);
+    void syncProgressUpdated(const QString &tagId, const QString &fileName, const QString &type, qint64 current, qint64 total);
 
 public:
     // +++ 3. 新增供 QML 调用的注册函数 +++
@@ -433,6 +441,7 @@ public:
     explicit AppBackend(QObject *parent = nullptr) : QObject(parent) {
         s_instance = this; // 绑定单例
         g_appBackend = this; // 也绑定 extern 全局指標
+        m_netManager = new QNetworkAccessManager(this); // 初始化网络
         loadConfig(); // 启动时加载配置
 
         // JSON 落盤防抖定時器：延遲 1 秒，單次觸發
@@ -720,6 +729,50 @@ public:
             }
         }
         return fileNames;
+    }
+
+    // ==================== Google Drive 下载模拟接口 ====================
+    Q_INVOKABLE void downloadFileFromCloud(const QString &tagId, const QString &folderPath, const QString &fileName) {
+        qDebug() << "请求下载云端文件:" << fileName;
+
+        // 假设你要调用的真实 API 类似这样：
+        // QUrl url("https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media");
+        // QNetworkRequest request(url);
+        // request.setRawHeader("Authorization", "Bearer " + accessToken);
+
+        // 【演示测试 URL】：我们拿一个测试用的下载链接代替
+        QUrl url("https://speed.hetzner.de/100MB.bin");
+        QNetworkRequest request(url);
+        QNetworkReply *reply = m_netManager->get(request);
+
+        // 1. 监听下载进度 -> 触发 QML 的动画
+        connect(reply, &QNetworkReply::downloadProgress, this, [=](qint64 bytesReceived, qint64 bytesTotal){
+            emit syncProgressUpdated(tagId, fileName, "下载", bytesReceived, bytesTotal);
+        });
+
+        // 2. 监听完成信号 -> 存入本地并打开
+        connect(reply, &QNetworkReply::finished, this, [=](){
+            if (reply->error() == QNetworkReply::NoError) {
+                // 确保本地目录存在
+                QDir dir(folderPath);
+                if (!dir.exists()) dir.mkpath(".");
+
+                QString destPath = dir.absoluteFilePath(fileName);
+                QFile file(destPath);
+                if (file.open(QIODevice::WriteOnly)) {
+                    file.write(reply->readAll());
+                    file.close();
+                    qDebug() << "下载完成，保存至:" << destPath;
+
+                    // 下载完成后自动调用系统打开
+                    QDesktopServices::openUrl(QUrl::fromLocalFile(destPath));
+                }
+            } else {
+                qDebug() << "下载失败:" << reply->errorString();
+                if (m_trayIcon) m_trayIcon->showMessage("云端下载失败", reply->errorString(), QSystemTrayIcon::Warning, 3000);
+            }
+            reply->deleteLater();
+        });
     }
 
     // ==================== 系統托盤 ====================

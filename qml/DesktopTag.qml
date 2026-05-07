@@ -12,6 +12,7 @@ Window {
     property color tagColor: "#0b57d0"
     property string savePath: "D:/"
     property string allowedExts: ""
+    property string storageMode: "local"
     // 起始位置（由 Main.qml 級聯計算或還原保存值）
     property int startX: 100
     property int startY: 100
@@ -421,7 +422,14 @@ Window {
                                 onDoubleClicked: {
                                     // 左键双击：打开文件
                                     if (mouse.button === Qt.LeftButton) {
-                                        Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName);
+                                        // 判断贴纸是否为 Google Drive 模式 (从 Main.qml 传入的属性)
+                                        if (tagWindow.storageMode === "gdrive") {
+                                            // 通知 C++ 去下载，下载完后 C++ 会自动打开它
+                                            appBackend.downloadFileFromCloud(tagWindow.tagId, tagWindow.savePath, model.fileName);
+                                        } else {
+                                            // 本地模式，直接打开
+                                            Qt.openUrlExternally("file:///" + tagWindow.savePath + "/" + model.fileName);
+                                        }
                                     } 
                                     // 右键双击：精准复原
                                     else if (mouse.button === Qt.RightButton) {
@@ -502,6 +510,86 @@ Window {
                                     }
                                 }
                             }
+
+                            // 新增监听进度
+                            function onSyncProgressUpdated(droppedTagId, fileName, type, currentBytes, totalBytes) {
+                                if (tagWindow.tagId === droppedTagId) {
+                                    syncProgressArea.syncFileName = fileName;
+                                    syncProgressArea.syncType = type;
+                                    syncProgressArea.syncProgress = totalBytes > 0 ? (currentBytes / totalBytes) : 0;
+                                    syncProgressArea.isSyncing = true;
+
+                                    // 传输完成延迟隐藏
+                                    if (currentBytes >= totalBytes && totalBytes > 0) {
+                                        Qt.callLater(function() {
+                                            var timer = Qt.createQmlObject("import QtQuick; Timer {}", tagWindow);
+                                            timer.interval = 1500;
+                                            timer.triggered.connect(function() {
+                                                syncProgressArea.isSyncing = false;
+                                                timer.destroy();
+                                            });
+                                            timer.start();
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ==================== 新增：底部同步进度条 ====================
+        Rectangle {
+            id: syncProgressArea
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: 6
+            height: 54
+            radius: capsuleRadius
+            color: tagHover.hovered ? "#1D1D1F" : Qt.rgba(29/255, 29/255, 31/255, 0.6)
+            border.color: Qt.rgba(1, 1, 1, 0.1)
+            border.width: 1
+            z: 50
+
+            property bool isSyncing: false
+            property string syncFileName: ""
+            property real syncProgress: 0.0 // 0.0 - 1.0
+            property string syncType: "下载"
+
+            // 滑出动画
+            y: isSyncing ? parent.height - height - 6 : parent.height
+            opacity: isSyncing ? 1.0 : 0.0
+            visible: opacity > 0
+            Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 12
+
+                Text { text: syncProgressArea.syncType === "上传" ? "☁️↑" : "☁️↓"; font.pixelSize: 18 }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Text {
+                        text: syncProgressArea.syncType + ": " + syncProgressArea.syncFileName
+                        font.pixelSize: 12
+                        color: "#F5F5F7"
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true; height: 4; radius: 2; color: Qt.rgba(1,1,1, 0.2)
+                        Rectangle {
+                            width: parent.width * syncProgressArea.syncProgress
+                            height: parent.height; radius: 2; color: tagColor
+                            Behavior on width { NumberAnimation { duration: 150 } }
                         }
                     }
                 }

@@ -53,6 +53,7 @@ ApplicationWindow {
 
     property int activeIndex: 0
     property string globalRootPath: "D:/Stickers"
+    property string currentStorageMode: "local"
     property var activeTagWindows: ({})
     // 1. 碰撞檢測：檢查給定的矩形區域是否與現有的貼紙重疊
     function isRectOverlapping(testX, testY, testW, testH) {
@@ -234,7 +235,8 @@ ApplicationWindow {
                         "path": tagData.savePath,
                         "tagColor": tagData.tagColor,
                         "fileCount": actualFileCount,
-                        "allowedExts": tagData.allowedExts || ""
+                        "allowedExts": tagData.allowedExts || "",
+                        "storageMode": tagData.storageMode || "local"
                     });
 
                     var qmlProps = Object.assign({}, tagData);
@@ -510,6 +512,97 @@ ApplicationWindow {
                                     Text { text: "创建一个带有自定义规则的桌面收纳区。"; font.pixelSize: 14; color: mdTextSecondary }
                                 }
 
+                                // ==================== 新增：存储模式滑动选择器 (iOS 风格) ====================
+                                Rectangle {
+                                    id: modeSelector
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 44
+                                    Layout.topMargin: 12
+                                    Layout.bottomMargin: 8
+                                    radius: 8
+                                    // iOS 风格的底层浅灰/深灰背景
+                                    color: isDarkMode ? Qt.rgba(0, 0, 0, 0.25) : Qt.rgba(0, 0, 0, 0.06)
+                                    border.color: mdCardBorder
+                                    border.width: 1
+
+                                    // 悬浮滑动的"药丸"指示器
+                                    Rectangle {
+                                        id: slidePill
+                                        width: parent.width / 2 - 4
+                                        height: parent.height - 4
+                                        y: 2
+                                        // 核心：根据状态计算 X 坐标，配合 Behavior 实现丝滑滑动
+                                        x: currentStorageMode === "local" ? 2 : parent.width / 2 + 2
+                                        radius: 6
+                                        color: isDarkMode ? "#3A3A3C" : "#FFFFFF"
+
+                                        // iOS 经典的轻微阴影
+                                        layer.enabled: true
+                                        layer.effect: MultiEffect {
+                                            shadowEnabled: true;
+                                            shadowBlur: 4.0;
+                                            shadowVerticalOffset: 1;
+                                            shadowColor: Qt.rgba(0,0,0,0.15)
+                                        }
+
+                                        Behavior on x {
+                                            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+                                        }
+                                    }
+
+                                    // 顶层点击区域与文字/图标
+                                    Row {
+                                        anchors.fill: parent
+
+                                        // 💻 本地模式热区
+                                        MouseArea {
+                                            width: parent.width / 2
+                                            height: parent.height
+                                            onClicked: currentStorageMode = "local"
+
+                                            Row {
+                                                anchors.centerIn: parent
+                                                spacing: 8
+                                                Text { text: "💻"; font.pixelSize: 15 }
+                                                Text {
+                                                    text: "本地收纳"
+                                                    font.pixelSize: 14
+                                                    font.weight: currentStorageMode === "local" ? Font.DemiBold : Font.Medium
+                                                    color: mdTextPrimary
+                                                }
+                                            }
+                                        }
+
+                                        // ☁️ Google Drive 模式热区
+                                        MouseArea {
+                                            width: parent.width / 2
+                                            height: parent.height
+                                            onClicked: currentStorageMode = "gdrive"
+
+                                            Row {
+                                                anchors.centerIn: parent
+                                                spacing: 8
+
+                                                // 使用官方 Google Drive SVG Logo
+                                                Image {
+                                                    source: "qrc:/assets/gdrive_logo.svg"
+                                                    width: 18; height: 18
+                                                    sourceSize: Qt.size(36, 36) // 保证抗锯齿清晰度
+                                                    antialiasing: true
+                                                }
+
+                                                Text {
+                                                    text: "Google Drive"
+                                                    font.pixelSize: 14
+                                                    font.weight: currentStorageMode === "gdrive" ? Font.DemiBold : Font.Medium
+                                                    color: mdTextPrimary
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // =========================================================================
+
                                 GridLayout {
                                     columns: 2; rowSpacing: 20; columnSpacing: 24; Layout.fillWidth: true; Layout.topMargin: 10
 
@@ -663,7 +756,8 @@ ApplicationWindow {
                                                 "id": newId, "tagTitle": inputName.text,
                                                 "tagWidth": tagW, "tagHeight": tagH,
                                                 "tagColor": inputColor.text,
-                                                "savePath": inputPath.text, "allowedExts": inputExt.text
+                                                "savePath": inputPath.text, "allowedExts": inputExt.text,
+                                                "storageMode": currentStorageMode
                                             };
                                             createTagComponent(function(comp) {
                                                 var qmlProps = Object.assign({}, jsonProps);
@@ -684,7 +778,7 @@ ApplicationWindow {
                                                     if (appBackend.getFilesInFolder) {
                                                         newTagFileCount = appBackend.getFilesInFolder(jsonProps.savePath).length;
                                                     }
-                                                    activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": newTagFileCount, "allowedExts": jsonProps.allowedExts });
+                                                    activeTagsModel.append({ "tagId": newId, "title": jsonProps.tagTitle, "path": jsonProps.savePath, "tagColor": jsonProps.tagColor, "fileCount": newTagFileCount, "allowedExts": jsonProps.allowedExts, "storageMode": jsonProps.storageMode });
                                                     tag.tagClosed.connect(createTagCloser());
                                                 }
                                                 console.log("🚀 新贴纸已生成！真实坐标 X:", tag.x, " Y:", tag.y, " 尺寸 W:", tag.width, " H:", tag.height, " 可见性:", tag.visible);
